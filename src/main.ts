@@ -1,6 +1,13 @@
 /* eslint-disable no-case-declarations */
 
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import {
+  type Enumerator,
+  type Field,
+  type Model,
+  createPrismaSchemaBuilder,
+} from '@mrleebo/prisma-ast'
 import camelCase from 'camelcase'
 import fs from 'fs-extra'
 import knex from 'knex'
@@ -29,36 +36,52 @@ function extractZodExpression(comment: string) {
   return null // No matching closing parenthesis
 }
 
-const dateTypes = ['date', 'datetime', 'timestamp']
-const stringTypes = [
-  'tinytext',
-  'text',
-  'mediumtext',
-  'longtext',
-  'json',
-  'decimal',
-  'time',
-  'year',
-  'char',
-  'varchar',
+const prismaValidTypes = [
+  'BigInt',
+  'Boolean',
+  'Bytes',
+  'DateTime',
+  'Decimal',
+  'Float',
+  'Int',
+  'Json',
+  'String',
+  'Enum',
 ]
-const numberTypes = [
-  'smallint',
-  'mediumint',
-  'int',
-  'bigint',
-  'float',
-  'double',
-]
-const booleanTypes = ['tinyint']
-const enumTypes = ['enum']
+
+const dateTypes = {
+  mysql: ['date', 'datetime', 'timestamp'],
+  prisma: ['DateTime'],
+}
+const stringTypes = {
+  mysql: [
+    'tinytext',
+    'text',
+    'mediumtext',
+    'longtext',
+    'json',
+    'decimal',
+    'time',
+    'year',
+    'char',
+    'varchar',
+  ],
+  prisma: ['String', 'Decimal', 'BigInt', 'Bytes', 'Json'],
+}
+const numberTypes = {
+  mysql: ['smallint', 'mediumint', 'int', 'bigint', 'float', 'double'],
+  prisma: ['Int', 'Float'],
+}
+const booleanTypes = { mysql: ['tinyint'], prisma: ['Boolean'] }
+const enumTypes = { mysql: ['enum'], prisma: ['Enum'] }
 
 export function getType(
   op: 'table' | 'insertable' | 'updateable' | 'selectable',
   desc: Desc,
   config: Config,
 ) {
-  const { Default, Extra, Null, Type, Comment } = desc
+  const schemaType = config.origin.type
+  const { Default, Extra, Null, Type, Comment, EnumOptions } = desc
   const isNullish = config.nullish && config.nullish === true
   const isTrim =
     config.useTrim && config.useTrim === true && op !== 'selectable'
@@ -129,7 +152,10 @@ export function getType(
     return field.join('.')
   }
   const generateEnumLikeField = () => {
-    const value = Type.replace('enum(', '').replace(')', '').replace(/,/g, ',')
+    const value =
+      schemaType === 'mysql'
+        ? Type.replace('enum(', '').replace(')', '').replace(/,/g, ',')
+        : EnumOptions?.map((e) => `'${e}'`).join(',')
     const field = [`z.enum([${value}])`]
     if (isNull) field.push(nullable)
     else if (hasDefaultValue) field.push(optional)
@@ -137,34 +163,45 @@ export function getType(
     if (isUpdateableFormat) field.push(optional)
     return field.join('.')
   }
-  if (dateTypes.includes(type)) return generateDateLikeField()
-  if (stringTypes.includes(type)) return generateStringLikeField()
-  if (numberTypes.includes(type)) return generateNumberLikeField()
-  if (booleanTypes.includes(type)) return generateBooleanLikeField()
-  if (enumTypes.includes(type)) return generateEnumLikeField()
+  if (dateTypes[schemaType].includes(type)) return generateDateLikeField()
+  if (stringTypes[schemaType].includes(type)) return generateStringLikeField()
+  if (numberTypes[schemaType].includes(type)) return generateNumberLikeField()
+  if (booleanTypes[schemaType].includes(type)) return generateBooleanLikeField()
+  if (enumTypes[schemaType].includes(type)) return generateEnumLikeField()
   throw new Error(`Unsupported column type: ${type}`)
 }
 
 export async function generate(config: Config) {
-  const db = knex({
-    client: 'mysql2',
-    connection: {
-      host: config.host,
-      port: config.port,
-      user: config.user,
-      password: config.password,
-      database: config.database,
-      ssl: config.ssl,
-    },
-  })
-
+  let tables: string[] = []
+  let prismaTables: (Model | null)[] = []
+  let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null
+  const db =
+    config.origin.type === 'mysql'
+      ? knex({
+          client: 'mysql2',
+          connection: {
+            host: config.origin.host,
+            port: config.origin.port,
+            user: config.origin.user,
+            password: config.origin.password,
+            database: config.origin.database,
+            ssl: config.ssl,
+          },
+        })
+      : null
   const isCamelCase = config.camelCase && config.camelCase === true
-
-  const t: { table_name: string }[][] = await db.raw(
-    'SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ?',
-    [config.database],
-  )
-  let tables = t[0].map((row) => row.table_name).sort()
+  if (config.origin.type === 'prisma') {
+    const schemaContents = readFileSync(config.origin.path).toString()
+    schema = createPrismaSchemaBuilder(schemaContents)
+    prismaTables = schema.findAllByType('model', {})
+    tables = prismaTables.filter((t) => t !== null).map((table) => table.name)
+  } else {
+    const t: { table_name: string }[][] = await db!.raw(
+      'SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ?',
+      [config.origin.database],
+    )
+    tables = t[0].map((row) => row.table_name).sort()
+  }
   const dests: string[] = []
 
   const includedTables = config.tables
@@ -192,9 +229,49 @@ export async function generate(config: Config) {
     })
   }
 
+  let describes: Desc[] = []
+
   for (let table of tables) {
-    const d = await db.raw(`SHOW FULL COLUMNS FROM ${table}`)
-    const describes = d[0] as Desc[]
+    if (config.origin.type === 'mysql') {
+      const d = await db!.raw(`SHOW FULL COLUMNS FROM ${table}`)
+      describes = d[0] as Desc[]
+    } else {
+      const prismaTable = prismaTables.find((t) => t?.name === table) as Model
+      let enumOptions: string[] | undefined
+      describes = prismaTable.properties
+        .filter((p): p is Field => p.type === 'field')
+        .map((field) => {
+          const defaultValueField = field.attributes
+            ? field.attributes.find((a) => a.name === 'default')
+            : null
+          const defaultValue = defaultValueField?.args?.[0].value
+          const parsedDefaultValue =
+            !!defaultValue && typeof defaultValue !== 'object'
+              ? defaultValue.toString()
+              : null
+          let fieldType = field.fieldType.toString()
+          if (!prismaValidTypes.includes(fieldType)) {
+            fieldType = 'Enum'
+            enumOptions = schema!
+              .findAllByType('enum', {
+                name: fieldType,
+              })[0]
+              ?.enumerators.filter(
+                (e): e is Enumerator => e.type === 'enumerator',
+              )
+              .map((e) => e.name)
+          }
+          return {
+            Field: field.name,
+            Default: parsedDefaultValue,
+            EnumOptions: enumOptions,
+            Extra: defaultValue ? 'DEFAULT_GENERATED' : '',
+            Type: field.fieldType.toString(),
+            Null: field.optional ? 'YES' : 'NO',
+            Comment: field.comment ?? '',
+          }
+        })
+    }
     if (isCamelCase) table = camelCase(table)
     let content = `import { z } from 'zod'
 
@@ -269,7 +346,9 @@ export type Selectable${camelCase(`${table}Type`, {
     if (!config.silent) console.log('Created:', dest)
     fs.outputFileSync(dest, content)
   }
-  await db.destroy()
+  if (config.origin.type === 'mysql') {
+    await db!.destroy()
+  }
   return dests
 }
 
@@ -298,17 +377,26 @@ type ValidTypes =
 export interface Desc {
   Field: string
   Default: string | null
+  EnumOptions?: string[]
   Extra: string
   Type: string
   Null: 'YES' | 'NO'
   Comment: string
 }
 export interface Config {
-  host: string
-  port: number
-  user: string
-  password: string
-  database: string
+  origin:
+    | {
+        type: 'prisma'
+        path: string
+      }
+    | {
+        type: 'mysql'
+        host: string
+        port: number
+        user: string
+        password: string
+        database: string
+      }
   tables?: string[]
   ignore?: string[]
   folder?: string

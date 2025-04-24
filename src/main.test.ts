@@ -3,12 +3,15 @@ import { type Config, type Desc, getType } from './main.js'
 
 describe('getType', () => {
   const config: Config = {
-    database: 'rise',
+    origin: {
+      type: 'mysql',
+      host: 'localhost',
+      port: 3306,
+      user: 'root',
+      password: 'password',
+      database: 'rise',
+    },
     camelCase: true,
-    host: 'localhost',
-    password: 'password',
-    port: 3306,
-    user: 'root',
     nullish: true,
     requiredString: true,
     useDateType: true,

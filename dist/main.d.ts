@@ -4,17 +4,24 @@ type ValidTypes = 'date' | 'datetime' | 'timestamp' | 'time' | 'year' | 'char' |
 export interface Desc {
     Field: string;
     Default: string | null;
+    EnumOptions?: string[];
     Extra: string;
     Type: string;
     Null: 'YES' | 'NO';
     Comment: string;
 }
 export interface Config {
-    host: string;
-    port: number;
-    user: string;
-    password: string;
-    database: string;
+    origin: {
+        type: 'prisma';
+        path: string;
+    } | {
+        type: 'mysql';
+        host: string;
+        port: number;
+        user: string;
+        password: string;
+        database: string;
+    };
     tables?: string[];
     ignore?: string[];
     folder?: string;

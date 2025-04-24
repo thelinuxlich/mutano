@@ -1,11 +1,11 @@
 {
-  "name": "zod-mysql",
+  "name": "mutano",
   "type": "module",
-  "version": "4.1.8",
-  "description": "Generate Zod interfaces from MySQL database",
-  "author": "Alisson Cavalcante Agiani <alisson@riseworks.io>",
+  "version": "1.0.0",
+  "description": "Converts Prisma/MySQL schemas to Zod interfaces",
+  "author": "Alisson Cavalcante Agiani <thelinuxlich@gmail.com>",
   "license": "MIT",
-  "repository": "git@github.com:riseworks/zod-mysql.git",
+  "repository": "git@github.com:thelinuxlich/mutano.git",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
   "files": ["dist"],
@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mrleebo/prisma-ast": "^0.12.1",
     "camelcase": "^8.0.0",
     "fs-extra": "^11.1.1",
     "knex": "^3.0.1",

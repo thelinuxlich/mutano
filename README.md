@@ -1,15 +1,13 @@
-# zod-mysql
+# mutano
 
-Generate Zod interfaces from MySQL database
-
-This was a fork of [mysql-zod](https://github.com/erwinstone/mysql-zod) but it diverged so much we decided to make it a separate project and publish it to npm.
+Converts Prisma/MySQL schemas to Zod interfaces
 
 ## Installation
 
-Install `zod-mysql` with npm
+Install `mutano` with npm
 
 ```bash
-npm install zod-mysql --save-dev
+npm install mutano --save-dev
 ```
 
 ## Usage/Examples
@@ -27,17 +25,20 @@ CREATE TABLE `user` (
   PRIMARY KEY (`id`)
 );
 ```
-Use the zod-mysql API:
+Use the mutano API:
 
 ```typescript
-import { generate } from 'zod-mysql'
+import { generate } from 'mutano'
 
 await generate({
-  host: '127.0.0.1',
-  port: 3306,
-  user: 'root',
-  password: 'secret',
-  database: 'myapp',
+  origin: { 
+    type: 'mysql',
+    host: '127.0.0.1',
+    port: 3306,
+    user: 'root',
+    password: 'secret',
+    database: 'myapp', 
+  },
 })
 ```
 
@@ -90,11 +91,22 @@ export type SelectableUserType = z.infer<typeof selectable_user>
 
 ```json
 {
-  "host": "127.0.0.1",
-  "port": 3306,
-  "user": "root",
-  "password": "secret",
-  "database": "myapp",
+  "origin": {
+    "type": "mysql",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "secret",
+    "database": "myapp",
+    "ssl": {
+      "ca": "path/to/ca.pem",
+      "cert": "path/to/cert.pem",
+      "key": "path/to/key.pem"
+    },
+  } | {
+    "type": "prisma"
+    "path": "path/to/schema.prisma"
+  },
   "tables": ["user", "log"],
   "ignore": ["log", "/^temp/"],
   "folder": "@zod",
@@ -102,11 +114,6 @@ export type SelectableUserType = z.infer<typeof selectable_user>
   "camelCase": false,
   "nullish": false,
   "requiredString": false,
-  "ssl": {
-    "ca": "path/to/ca.pem",
-    "cert": "path/to/cert.pem",
-    "key": "path/to/key.pem"
-  },
   "useTrim": false,
   "useDateType": false,
   "silent": false,
@@ -126,7 +133,6 @@ export type SelectableUserType = z.infer<typeof selectable_user>
 | camelCase | Convert all table names and their properties to camelcase. (eg: `profile_picture` becomes `profilePicture`) |
 | nullish | Set schema as `nullish` instead of `nullable` |
 | requiredString | Add `min(1)` for string schema |
-| ssl | SSL credentials to use when connecting to server. |
 | useDateType | Use a specialized Zod type for date-like fields instead of string
 | useTrim | Use `z.string().trim()` instead of `z.string()` |
 | silent | Don't log anything to the console |
