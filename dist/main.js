@@ -229,10 +229,12 @@ async function generate(config) {
     } else {
       const prismaTable = prismaTables.find((t) => t?.name === table);
       let enumOptions;
-      describes = prismaTable.properties.filter((p) => p.type === "field").map((field) => {
+      describes = prismaTable.properties.filter(
+        (p) => p.type === "field" && !p.attributes?.find((a) => a.name === "relation")
+      ).map((field) => {
         const defaultValueField = field.attributes ? field.attributes.find((a) => a.name === "default") : null;
         const defaultValue = defaultValueField?.args?.[0].value;
-        const parsedDefaultValue = !!defaultValue && typeof defaultValue !== "object" ? defaultValue.toString() : null;
+        const parsedDefaultValue = defaultValue !== void 0 && typeof defaultValue !== "object" ? defaultValue.toString() : null;
         let fieldType = field.fieldType.toString();
         if (!prismaValidTypes.includes(fieldType)) {
           enumOptions = schema.findAllByType("enum", {
@@ -246,7 +248,7 @@ async function generate(config) {
           Field: field.name,
           Default: parsedDefaultValue,
           EnumOptions: enumOptions,
-          Extra: defaultValue ? "DEFAULT_GENERATED" : "",
+          Extra: parsedDefaultValue !== null ? "DEFAULT_GENERATED" : "",
           Type: fieldType,
           Null: field.optional ? "YES" : "NO",
           Comment: field.comment ?? ""

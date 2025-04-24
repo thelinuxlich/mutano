@@ -1,7 +1,7 @@
 {
   "name": "mutano",
   "type": "module",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Converts Prisma/MySQL schemas to Zod interfaces",
   "author": "Alisson Cavalcante Agiani <thelinuxlich@gmail.com>",
   "license": "MIT",

@@ -239,14 +239,18 @@ export async function generate(config: Config) {
       const prismaTable = prismaTables.find((t) => t?.name === table) as Model
       let enumOptions: string[] | undefined
       describes = prismaTable.properties
-        .filter((p): p is Field => p.type === 'field')
+        .filter(
+          (p): p is Field =>
+            p.type === 'field' &&
+            !p.attributes?.find((a) => a.name === 'relation'),
+        )
         .map((field) => {
           const defaultValueField = field.attributes
             ? field.attributes.find((a) => a.name === 'default')
             : null
           const defaultValue = defaultValueField?.args?.[0].value
           const parsedDefaultValue =
-            !!defaultValue && typeof defaultValue !== 'object'
+            defaultValue !== undefined && typeof defaultValue !== 'object'
               ? defaultValue.toString()
               : null
           let fieldType = field.fieldType.toString()
@@ -265,7 +269,7 @@ export async function generate(config: Config) {
             Field: field.name,
             Default: parsedDefaultValue,
             EnumOptions: enumOptions,
-            Extra: defaultValue ? 'DEFAULT_GENERATED' : '',
+            Extra: parsedDefaultValue !== null ? 'DEFAULT_GENERATED' : '',
             Type: fieldType,
             Null: field.optional ? 'YES' : 'NO',
             Comment: field.comment ?? '',
