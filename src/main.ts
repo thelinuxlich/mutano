@@ -95,7 +95,7 @@ export function getType(
     config.requiredString === true &&
     op !== 'selectable'
   const isUseDateType = config.useDateType && config.useDateType === true
-  const type = Type.split('(')[0].split(' ')[0]
+  const type = schemaType === 'mysql' ? Type.split('(')[0].split(' ')[0] : Type
   const zDate = [
     'z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())',
   ]
@@ -251,7 +251,6 @@ export async function generate(config: Config) {
               : null
           let fieldType = field.fieldType.toString()
           if (!prismaValidTypes.includes(fieldType)) {
-            fieldType = 'Enum'
             enumOptions = schema!
               .findAllByType('enum', {
                 name: fieldType,
@@ -260,13 +259,14 @@ export async function generate(config: Config) {
                 (e): e is Enumerator => e.type === 'enumerator',
               )
               .map((e) => e.name)
+            fieldType = 'Enum'
           }
           return {
             Field: field.name,
             Default: parsedDefaultValue,
             EnumOptions: enumOptions,
             Extra: defaultValue ? 'DEFAULT_GENERATED' : '',
-            Type: field.fieldType.toString(),
+            Type: fieldType,
             Null: field.optional ? 'YES' : 'NO',
             Comment: field.comment ?? '',
           }
