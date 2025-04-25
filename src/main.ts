@@ -272,7 +272,12 @@ export async function generate(config: Config) {
               ?.enumerators.filter(
                 (e): e is Enumerator => e.type === 'enumerator',
               )
-              .map((e) => e.name)
+              .map((e) => {
+                const attrs = e.attributes?.find((a) => a.name === 'map')
+                return attrs?.args
+                  ? attrs.args[0].value.toString().replace(/"/g, '')
+                  : e.name
+              })
             fieldType = 'Enum'
           }
           return {
