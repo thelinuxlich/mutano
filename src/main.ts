@@ -242,6 +242,7 @@ export async function generate(config: Config) {
         .filter(
           (p): p is Field =>
             p.type === 'field' &&
+            p.array !== true &&
             !p.attributes?.find((a) => a.name === 'relation'),
         )
         .map((field) => {
