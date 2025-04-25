@@ -261,7 +261,7 @@ export async function generate(config: Config) {
           }
           const parsedDefaultValue =
             defaultValue !== undefined && typeof defaultValue !== 'object'
-              ? defaultValue.toString()
+              ? defaultValue.toString().replace(/"/g, '')
               : null
           let fieldType = field.fieldType.toString()
           if (!prismaValidTypes.includes(fieldType)) {

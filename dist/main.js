@@ -239,7 +239,7 @@ async function generate(config) {
         defaultValue?.type === "function") {
           defaultGenerated = true;
         }
-        const parsedDefaultValue = defaultValue !== void 0 && typeof defaultValue !== "object" ? defaultValue.toString() : null;
+        const parsedDefaultValue = defaultValue !== void 0 && typeof defaultValue !== "object" ? defaultValue.toString().replace(/"/g, "") : null;
         let fieldType = field.fieldType.toString();
         if (!prismaValidTypes.includes(fieldType)) {
           enumOptions = schema.findAllByType("enum", {
