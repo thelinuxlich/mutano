@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   type Enumerator,
   type Field,
+  type KeyValue,
   type Model,
   createPrismaSchemaBuilder,
 } from '@mrleebo/prisma-ast'
@@ -246,10 +247,18 @@ export async function generate(config: Config) {
             !p.attributes?.find((a) => a.name === 'relation'),
         )
         .map((field) => {
+          let defaultGenerated = false
           const defaultValueField = field.attributes
             ? field.attributes.find((a) => a.name === 'default')
             : null
           const defaultValue = defaultValueField?.args?.[0].value
+          if (
+            typeof defaultValue === 'object' &&
+            // @ts-ignore
+            defaultValue?.type === 'function'
+          ) {
+            defaultGenerated = true
+          }
           const parsedDefaultValue =
             defaultValue !== undefined && typeof defaultValue !== 'object'
               ? defaultValue.toString()
@@ -270,7 +279,7 @@ export async function generate(config: Config) {
             Field: field.name,
             Default: parsedDefaultValue,
             EnumOptions: enumOptions,
-            Extra: parsedDefaultValue !== null ? 'DEFAULT_GENERATED' : '',
+            Extra: defaultGenerated ? 'DEFAULT_GENERATED' : '',
             Type: fieldType,
             Null: field.optional ? 'YES' : 'NO',
             Comment: field.comment ?? '',

@@ -232,8 +232,13 @@ async function generate(config) {
       describes = prismaTable.properties.filter(
         (p) => p.type === "field" && p.array !== true && !p.attributes?.find((a) => a.name === "relation")
       ).map((field) => {
+        let defaultGenerated = false;
         const defaultValueField = field.attributes ? field.attributes.find((a) => a.name === "default") : null;
         const defaultValue = defaultValueField?.args?.[0].value;
+        if (typeof defaultValue === "object" && // @ts-ignore
+        defaultValue?.type === "function") {
+          defaultGenerated = true;
+        }
         const parsedDefaultValue = defaultValue !== void 0 && typeof defaultValue !== "object" ? defaultValue.toString() : null;
         let fieldType = field.fieldType.toString();
         if (!prismaValidTypes.includes(fieldType)) {
@@ -248,7 +253,7 @@ async function generate(config) {
           Field: field.name,
           Default: parsedDefaultValue,
           EnumOptions: enumOptions,
-          Extra: parsedDefaultValue !== null ? "DEFAULT_GENERATED" : "",
+          Extra: defaultGenerated ? "DEFAULT_GENERATED" : "",
           Type: fieldType,
           Null: field.optional ? "YES" : "NO",
           Comment: field.comment ?? ""
