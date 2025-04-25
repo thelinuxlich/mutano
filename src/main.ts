@@ -119,7 +119,8 @@ export function getType(
   const generateDateLikeField = () => {
     const field = typeOverride ? [typeOverride] : dateField
     if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue) field.push(optional)
+    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+      field.push(optional)
     if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`)
     if (isUpdateableFormat) field.push(optional)
     return field.join('.')
@@ -127,7 +128,8 @@ export function getType(
   const generateStringLikeField = () => {
     const field = typeOverride ? [typeOverride] : string
     if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue) field.push(optional)
+    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+      field.push(optional)
     else if (isRequiredString && !typeOverride) field.push(min1)
     if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`)
     if (isUpdateableFormat) field.push(optional)
@@ -136,7 +138,8 @@ export function getType(
   const generateBooleanLikeField = () => {
     const field = typeOverride ? [typeOverride] : boolean
     if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue) field.push(optional)
+    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+      field.push(optional)
     if (hasDefaultValue && !isGenerated)
       field.push(`default(${Boolean(+Default)})`)
     if (isUpdateableFormat) field.push(optional)
@@ -147,7 +150,8 @@ export function getType(
     const field = typeOverride ? [typeOverride] : number
     if (unsigned && !typeOverride) field.push(nonnegative)
     if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue) field.push(optional)
+    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+      field.push(optional)
     if (hasDefaultValue && !isGenerated) field.push(`default(${Default})`)
     if (isUpdateableFormat) field.push(optional)
     return field.join('.')
@@ -159,7 +163,8 @@ export function getType(
         : EnumOptions?.map((e) => `'${e}'`).join(',')
     const field = [`z.enum([${value}])`]
     if (isNull) field.push(nullable)
-    else if (hasDefaultValue) field.push(optional)
+    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+      field.push(optional)
     if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`)
     if (isUpdateableFormat) field.push(optional)
     return field.join('.')

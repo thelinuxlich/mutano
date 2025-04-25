@@ -95,7 +95,7 @@ function getType(op, desc, config) {
     const field = typeOverride ? [typeOverride] : dateField;
     if (isNull && !typeOverride)
       field.push(nullable);
-    else if (hasDefaultValue)
+    else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
     if (hasDefaultValue && !isGenerated)
       field.push(`default('${Default}')`);
@@ -107,7 +107,7 @@ function getType(op, desc, config) {
     const field = typeOverride ? [typeOverride] : string;
     if (isNull && !typeOverride)
       field.push(nullable);
-    else if (hasDefaultValue)
+    else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
     else if (isRequiredString && !typeOverride)
       field.push(min1);
@@ -121,7 +121,7 @@ function getType(op, desc, config) {
     const field = typeOverride ? [typeOverride] : boolean;
     if (isNull && !typeOverride)
       field.push(nullable);
-    else if (hasDefaultValue)
+    else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
     if (hasDefaultValue && !isGenerated)
       field.push(`default(${Boolean(+Default)})`);
@@ -136,7 +136,7 @@ function getType(op, desc, config) {
       field.push(nonnegative);
     if (isNull && !typeOverride)
       field.push(nullable);
-    else if (hasDefaultValue)
+    else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
     if (hasDefaultValue && !isGenerated)
       field.push(`default(${Default})`);
@@ -149,7 +149,7 @@ function getType(op, desc, config) {
     const field = [`z.enum([${value}])`];
     if (isNull)
       field.push(nullable);
-    else if (hasDefaultValue)
+    else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
     if (hasDefaultValue && !isGenerated)
       field.push(`default('${Default}')`);
