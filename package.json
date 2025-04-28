@@ -1,8 +1,8 @@
 {
   "name": "mutano",
   "type": "module",
-  "version": "1.0.8",
-  "description": "Converts Prisma/MySQL schemas to Zod interfaces",
+  "version": "1.1.0",
+  "description": "Converts Prisma/MySQL/PostgreSQL/SQLite schemas to Zod interfaces",
   "author": "Alisson Cavalcante Agiani <thelinuxlich@gmail.com>",
   "license": "MIT",
   "repository": "git@github.com:thelinuxlich/mutano.git",
@@ -16,14 +16,16 @@
   "dependencies": {
     "@mrleebo/prisma-ast": "^0.12.1",
     "camelcase": "^8.0.0",
-    "fs-extra": "^11.1.1",
-    "knex": "^3.0.1",
-    "mysql2": "^3.6.3"
+    "fs-extra": "^11.3.0",
+    "knex": "^3.1.0",
+    "mysql2": "^3.14.1",
+    "pg": "^8.15.6",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "@types/fs-extra": "^11.0.3",
-    "esbuild": "^0.19.5",
-    "typescript": "^5.2.2",
-    "vitest": "^0.34.6"
+    "@types/fs-extra": "^11.0.4",
+    "esbuild": "^0.25.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
   }
 }

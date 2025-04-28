@@ -8,8 +8,7 @@ import fs from "fs-extra";
 import knex from "knex";
 function extractZodExpression(comment) {
   const zodStart = comment.indexOf("@zod(");
-  if (zodStart === -1)
-    return null;
+  if (zodStart === -1) return null;
   let openParens = 0;
   let position = zodStart + 5;
   while (position < comment.length) {
@@ -93,80 +92,59 @@ function getType(op, desc, config) {
   const typeOverride = zodOverrideType ?? config.overrideTypes?.[type];
   const generateDateLikeField = () => {
     const field = typeOverride ? [typeOverride] : dateField;
-    if (isNull && !typeOverride)
-      field.push(nullable);
+    if (isNull && !typeOverride) field.push(nullable);
     else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
-    if (hasDefaultValue && !isGenerated)
-      field.push(`default('${Default}')`);
-    if (isUpdateableFormat)
-      field.push(optional);
+    if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`);
+    if (isUpdateableFormat) field.push(optional);
     return field.join(".");
   };
   const generateStringLikeField = () => {
     const field = typeOverride ? [typeOverride] : string;
-    if (isNull && !typeOverride)
-      field.push(nullable);
+    if (isNull && !typeOverride) field.push(nullable);
     else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
-    else if (isRequiredString && !typeOverride)
-      field.push(min1);
-    if (hasDefaultValue && !isGenerated)
-      field.push(`default('${Default}')`);
-    if (isUpdateableFormat)
-      field.push(optional);
+    else if (isRequiredString && !typeOverride) field.push(min1);
+    if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`);
+    if (isUpdateableFormat) field.push(optional);
     return field.join(".");
   };
   const generateBooleanLikeField = () => {
     const field = typeOverride ? [typeOverride] : boolean;
-    if (isNull && !typeOverride)
-      field.push(nullable);
+    if (isNull && !typeOverride) field.push(nullable);
     else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
     if (hasDefaultValue && !isGenerated)
       field.push(`default(${Boolean(+Default)})`);
-    if (isUpdateableFormat)
-      field.push(optional);
+    if (isUpdateableFormat) field.push(optional);
     return field.join(".");
   };
   const generateNumberLikeField = () => {
     const unsigned = Type.endsWith(" unsigned");
     const field = typeOverride ? [typeOverride] : number;
-    if (unsigned && !typeOverride)
-      field.push(nonnegative);
-    if (isNull && !typeOverride)
-      field.push(nullable);
+    if (unsigned && !typeOverride) field.push(nonnegative);
+    if (isNull && !typeOverride) field.push(nullable);
     else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
-    if (hasDefaultValue && !isGenerated)
-      field.push(`default(${Default})`);
-    if (isUpdateableFormat)
-      field.push(optional);
+    if (hasDefaultValue && !isGenerated) field.push(`default(${Default})`);
+    if (isUpdateableFormat) field.push(optional);
     return field.join(".");
   };
   const generateEnumLikeField = () => {
     const value = schemaType === "mysql" ? Type.replace("enum(", "").replace(")", "").replace(/,/g, ",") : EnumOptions?.map((e) => `'${e}'`).join(",");
     const field = [`z.enum([${value}])`];
-    if (isNull)
-      field.push(nullable);
+    if (isNull) field.push(nullable);
     else if (hasDefaultValue || !hasDefaultValue && isGenerated)
       field.push(optional);
-    if (hasDefaultValue && !isGenerated)
-      field.push(`default('${Default}')`);
-    if (isUpdateableFormat)
-      field.push(optional);
+    if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`);
+    if (isUpdateableFormat) field.push(optional);
     return field.join(".");
   };
-  if (dateTypes[schemaType].includes(type))
-    return generateDateLikeField();
-  if (stringTypes[schemaType].includes(type))
-    return generateStringLikeField();
-  if (numberTypes[schemaType].includes(type))
-    return generateNumberLikeField();
-  if (booleanTypes[schemaType].includes(type))
-    return generateBooleanLikeField();
-  if (enumTypes[schemaType].includes(type))
-    return generateEnumLikeField();
+  if (dateTypes[schemaType].includes(type)) return generateDateLikeField();
+  if (stringTypes[schemaType].includes(type)) return generateStringLikeField();
+  if (numberTypes[schemaType].includes(type)) return generateNumberLikeField();
+  if (booleanTypes[schemaType].includes(type)) return generateBooleanLikeField();
+  if (enumTypes[schemaType].includes(type)) return generateEnumLikeField();
   throw new Error(`Unsupported column type: ${type}`);
 }
 async function generate(config) {
@@ -215,8 +193,7 @@ async function generate(config) {
       let useTable = true;
       for (const text of ignoredTablesRegex) {
         const pattern = text.substring(1, text.length - 1);
-        if (table.match(pattern) !== null)
-          useTable = false;
+        if (table.match(pattern) !== null) useTable = false;
       }
       return useTable;
     });
@@ -263,8 +240,7 @@ async function generate(config) {
         };
       });
     }
-    if (isCamelCase)
-      table = camelCase(table);
+    if (isCamelCase) table = camelCase(table);
     let content = `import { z } from 'zod'
 
 export const ${table} = z.object({`;
@@ -332,8 +308,7 @@ export type Selectable${camelCase(`${table}Type`, {
     const file = config.suffix && config.suffix !== "" ? `${table}.${config.suffix}.ts` : `${table}.ts`;
     const dest = path.join(dir, file);
     dests.push(dest);
-    if (!config.silent)
-      console.log("Created:", dest);
+    if (!config.silent) console.log("Created:", dest);
     fs.outputFileSync(dest, content);
   }
   if (config.origin.type === "mysql") {

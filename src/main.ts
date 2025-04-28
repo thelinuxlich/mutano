@@ -1,438 +1,742 @@
 /* eslint-disable no-case-declarations */
 
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
-  type Enumerator,
-  type Field,
-  type KeyValue,
-  type Model,
-  createPrismaSchemaBuilder,
-} from '@mrleebo/prisma-ast'
-import camelCase from 'camelcase'
-import fs from 'fs-extra'
-import knex from 'knex'
+	type Enumerator,
+	type Field,
+	type Model,
+	createPrismaSchemaBuilder,
+} from "@mrleebo/prisma-ast";
+import camelCase from "camelcase";
+import fs from "fs-extra";
+import knex from "knex";
 
 // Extract Zod validator expression with balanced parentheses
 function extractZodExpression(comment: string) {
-  const zodStart = comment.indexOf('@zod(')
-  if (zodStart === -1) return null
+	const zodStart = comment.indexOf("@zod(");
+	if (zodStart === -1) return null;
 
-  let openParens = 0
-  let position = zodStart + 5 // Skip '@zod('
+	let openParens = 0;
+	let position = zodStart + 5; // Skip '@zod('
 
-  while (position < comment.length) {
-    if (comment[position] === '(') {
-      openParens++
-    } else if (comment[position] === ')') {
-      if (openParens === 0) {
-        // We found the closing parenthesis
-        return comment.substring(zodStart + 5, position)
-      }
-      openParens--
-    }
-    position++
-  }
+	while (position < comment.length) {
+		if (comment[position] === "(") {
+			openParens++;
+		} else if (comment[position] === ")") {
+			if (openParens === 0) {
+				// We found the closing parenthesis
+				return comment.substring(zodStart + 5, position);
+			}
+			openParens--;
+		}
+		position++;
+	}
 
-  return null // No matching closing parenthesis
+	return null; // No matching closing parenthesis
 }
 
 const prismaValidTypes = [
-  'BigInt',
-  'Boolean',
-  'Bytes',
-  'DateTime',
-  'Decimal',
-  'Float',
-  'Int',
-  'Json',
-  'String',
-  'Enum',
-]
+	"BigInt",
+	"Boolean",
+	"Bytes",
+	"DateTime",
+	"Decimal",
+	"Float",
+	"Int",
+	"Json",
+	"String",
+	"Enum",
+];
 
 const dateTypes = {
-  mysql: ['date', 'datetime', 'timestamp'],
-  prisma: ['DateTime'],
-}
+	mysql: ["date", "datetime", "timestamp"],
+	postgres: [
+		"date",
+		"timestamp",
+		"timestamptz",
+		"timestamp without time zone",
+		"timestamp with time zone",
+	],
+	sqlite: ["datetime"],
+	prisma: ["DateTime"],
+};
 const stringTypes = {
-  mysql: [
-    'tinytext',
-    'text',
-    'mediumtext',
-    'longtext',
-    'json',
-    'decimal',
-    'time',
-    'year',
-    'char',
-    'varchar',
-  ],
-  prisma: ['String', 'Decimal', 'BigInt', 'Bytes', 'Json'],
-}
+	mysql: [
+		"tinytext",
+		"text",
+		"mediumtext",
+		"longtext",
+		"json",
+		"decimal",
+		"time",
+		"year",
+		"char",
+		"varchar",
+	],
+	postgres: [
+		"text",
+		"character varying",
+		"varchar",
+		"char",
+		"character",
+		"json",
+		"jsonb",
+		"uuid",
+		"time",
+		"timetz",
+		"interval",
+		"name",
+		"citext",
+		"numeric",
+		"decimal",
+	],
+	sqlite: [
+		"text",
+		"character",
+		"varchar",
+		"varying character",
+		"nchar",
+		"native character",
+		"nvarchar",
+		"clob",
+		"json",
+	],
+	prisma: ["String", "Decimal", "BigInt", "Bytes", "Json"],
+};
 const numberTypes = {
-  mysql: ['smallint', 'mediumint', 'int', 'bigint', 'float', 'double'],
-  prisma: ['Int', 'Float'],
-}
-const booleanTypes = { mysql: ['tinyint'], prisma: ['Boolean'] }
-const enumTypes = { mysql: ['enum'], prisma: ['Enum'] }
+	mysql: ["smallint", "mediumint", "int", "bigint", "float", "double"],
+	postgres: [
+		"smallint",
+		"integer",
+		"bigint",
+		"decimal",
+		"numeric",
+		"real",
+		"double precision",
+		"serial",
+		"bigserial",
+	],
+	sqlite: [
+		"int",
+		"integer",
+		"tinyint",
+		"smallint",
+		"mediumint",
+		"bigint",
+		"unsigned big int",
+		"int2",
+		"int8",
+		"real",
+		"double",
+		"double precision",
+		"float",
+		"numeric",
+		"decimal",
+	],
+	prisma: ["Int", "Float"],
+};
+const booleanTypes = {
+	mysql: ["tinyint"],
+	postgres: ["boolean", "bool"],
+	sqlite: ["boolean"],
+	prisma: ["Boolean"],
+};
+const enumTypes = {
+	mysql: ["enum"],
+	postgres: ["USER-DEFINED"],
+	sqlite: [], // SQLite doesn't have native enum types
+	prisma: ["Enum"],
+};
 
 export function getType(
-  op: 'table' | 'insertable' | 'updateable' | 'selectable',
-  desc: Desc,
-  config: Config,
+	op: "table" | "insertable" | "updateable" | "selectable",
+	desc: Desc,
+	config: Config,
 ) {
-  const schemaType = config.origin.type
-  const { Default, Extra, Null, Type, Comment, EnumOptions } = desc
-  const isNullish = config.nullish && config.nullish === true
-  const isTrim =
-    config.useTrim && config.useTrim === true && op !== 'selectable'
-  const hasDefaultValue = Default !== null && op !== 'selectable'
-  const isGenerated = ['DEFAULT_GENERATED', 'auto_increment'].includes(Extra)
-  const isNull = Null === 'YES'
-  if (isGenerated && !isNull && ['insertable', 'updateable'].includes(op))
-    return
-  const isRequiredString =
-    config.requiredString &&
-    config.requiredString === true &&
-    op !== 'selectable'
-  const isUseDateType = config.useDateType && config.useDateType === true
-  const type = schemaType === 'mysql' ? Type.split('(')[0].split(' ')[0] : Type
-  const zDate = [
-    'z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())',
-  ]
-  const string = [isTrim ? 'z.string().trim()' : 'z.string()']
-  const number = ['z.number()']
-  const boolean = [
-    'z.union([z.number(),z.string(),z.boolean()]).pipe(z.coerce.boolean())',
-  ]
-  const dateField = isUseDateType ? zDate : string
-  const nullable = isNullish && op !== 'selectable' ? 'nullish()' : 'nullable()'
-  const optional = 'optional()'
-  const nonnegative = 'nonnegative()'
-  const isUpdateableFormat = op === 'updateable' && !isNull && !hasDefaultValue
-  const min1 = 'min(1)'
-  const zodOverrideType = config.zodCommentTypes
-    ? extractZodExpression(Comment)
-    : null
-  const typeOverride =
-    zodOverrideType ?? config.overrideTypes?.[type as ValidTypes]
-  const generateDateLikeField = () => {
-    const field = typeOverride ? [typeOverride] : dateField
-    if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
-      field.push(optional)
-    if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`)
-    if (isUpdateableFormat) field.push(optional)
-    return field.join('.')
-  }
-  const generateStringLikeField = () => {
-    const field = typeOverride ? [typeOverride] : string
-    if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
-      field.push(optional)
-    else if (isRequiredString && !typeOverride) field.push(min1)
-    if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`)
-    if (isUpdateableFormat) field.push(optional)
-    return field.join('.')
-  }
-  const generateBooleanLikeField = () => {
-    const field = typeOverride ? [typeOverride] : boolean
-    if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
-      field.push(optional)
-    if (hasDefaultValue && !isGenerated)
-      field.push(`default(${Boolean(+Default)})`)
-    if (isUpdateableFormat) field.push(optional)
-    return field.join('.')
-  }
-  const generateNumberLikeField = () => {
-    const unsigned = Type.endsWith(' unsigned')
-    const field = typeOverride ? [typeOverride] : number
-    if (unsigned && !typeOverride) field.push(nonnegative)
-    if (isNull && !typeOverride) field.push(nullable)
-    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
-      field.push(optional)
-    if (hasDefaultValue && !isGenerated) field.push(`default(${Default})`)
-    if (isUpdateableFormat) field.push(optional)
-    return field.join('.')
-  }
-  const generateEnumLikeField = () => {
-    const value =
-      schemaType === 'mysql'
-        ? Type.replace('enum(', '').replace(')', '').replace(/,/g, ',')
-        : EnumOptions?.map((e) => `'${e}'`).join(',')
-    const field = [`z.enum([${value}])`]
-    if (isNull) field.push(nullable)
-    else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
-      field.push(optional)
-    if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`)
-    if (isUpdateableFormat) field.push(optional)
-    return field.join('.')
-  }
-  if (dateTypes[schemaType].includes(type)) return generateDateLikeField()
-  if (stringTypes[schemaType].includes(type)) return generateStringLikeField()
-  if (numberTypes[schemaType].includes(type)) return generateNumberLikeField()
-  if (booleanTypes[schemaType].includes(type)) return generateBooleanLikeField()
-  if (enumTypes[schemaType].includes(type)) return generateEnumLikeField()
-  throw new Error(`Unsupported column type: ${type}`)
+	const schemaType = config.origin.type;
+	const { Default, Extra, Null, Type, Comment, EnumOptions } = desc;
+	const isNullish = config.nullish && config.nullish === true;
+	const isTrim =
+		config.useTrim && config.useTrim === true && op !== "selectable";
+	const hasDefaultValue = Default !== null && op !== "selectable";
+	const isGenerated = ["DEFAULT_GENERATED", "auto_increment"].includes(Extra);
+	const isNull = Null === "YES";
+	if (isGenerated && !isNull && ["insertable", "updateable"].includes(op))
+		return;
+	const isRequiredString =
+		config.requiredString &&
+		config.requiredString === true &&
+		op !== "selectable";
+	const isUseDateType = config.useDateType && config.useDateType === true;
+	const type = schemaType === "mysql" ? Type.split("(")[0].split(" ")[0] : Type;
+	const zDate = [
+		"z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())",
+	];
+	const string = [isTrim ? "z.string().trim()" : "z.string()"];
+	const number = ["z.number()"];
+	const boolean = [
+		"z.union([z.number(),z.string(),z.boolean()]).pipe(z.coerce.boolean())",
+	];
+	const dateField = isUseDateType ? zDate : string;
+	const nullable =
+		isNullish && op !== "selectable" ? "nullish()" : "nullable()";
+	const optional = "optional()";
+	const nonnegative = "nonnegative()";
+	const isUpdateableFormat = op === "updateable" && !isNull && !hasDefaultValue;
+	const min1 = "min(1)";
+	const zodOverrideType = config.magicComments
+		? extractZodExpression(Comment)
+		: null;
+
+	// Get the override type based on the database type
+	let typeOverride: string | null = zodOverrideType;
+	if (!typeOverride && config.origin.overrideTypes) {
+		if (config.origin.type === "mysql") {
+			typeOverride =
+				config.origin.overrideTypes[type as MySQLValidTypes] || null;
+		} else if (config.origin.type === "postgres") {
+			typeOverride =
+				config.origin.overrideTypes[type as PostgresValidTypes] || null;
+		} else if (config.origin.type === "sqlite") {
+			typeOverride =
+				config.origin.overrideTypes[type as SQLiteValidTypes] || null;
+		} else if (config.origin.type === "prisma") {
+			typeOverride =
+				config.origin.overrideTypes[type as PrismaValidTypes] || null;
+		}
+	}
+	const generateDateLikeField = () => {
+		const field = typeOverride ? [typeOverride] : dateField;
+		if (isNull && !typeOverride) field.push(nullable);
+		else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+			field.push(optional);
+		if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`);
+		if (isUpdateableFormat) field.push(optional);
+		return field.join(".");
+	};
+	const generateStringLikeField = () => {
+		const field = typeOverride ? [typeOverride] : string;
+		if (isNull && !typeOverride) field.push(nullable);
+		else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+			field.push(optional);
+		else if (isRequiredString && !typeOverride) field.push(min1);
+		if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`);
+		if (isUpdateableFormat) field.push(optional);
+		return field.join(".");
+	};
+	const generateBooleanLikeField = () => {
+		const field = typeOverride ? [typeOverride] : boolean;
+		if (isNull && !typeOverride) field.push(nullable);
+		else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+			field.push(optional);
+		if (hasDefaultValue && !isGenerated) {
+			// Handle PostgreSQL boolean values which can be 'true' or 'false' strings
+			if (Default === "true" || Default === "false") {
+				field.push(`default(${Default})`);
+			} else {
+				field.push(`default(${Boolean(+Default)})`);
+			}
+		}
+		if (isUpdateableFormat) field.push(optional);
+		return field.join(".");
+	};
+	const generateNumberLikeField = () => {
+		const unsigned = Type.endsWith(" unsigned");
+		const field = typeOverride ? [typeOverride] : number;
+		if (unsigned && !typeOverride) field.push(nonnegative);
+		if (isNull && !typeOverride) field.push(nullable);
+		else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+			field.push(optional);
+		if (hasDefaultValue && !isGenerated) field.push(`default(${Default})`);
+		if (isUpdateableFormat) field.push(optional);
+		return field.join(".");
+	};
+	const generateEnumLikeField = () => {
+		const value =
+			schemaType === "mysql"
+				? Type.replace("enum(", "").replace(")", "").replace(/,/g, ",")
+				: EnumOptions?.map((e) => `'${e}'`).join(",");
+		const field = [`z.enum([${value}])`];
+		if (isNull) field.push(nullable);
+		else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
+			field.push(optional);
+		if (hasDefaultValue && !isGenerated) field.push(`default('${Default}')`);
+		if (isUpdateableFormat) field.push(optional);
+		return field.join(".");
+	};
+	if (dateTypes[schemaType].includes(type)) return generateDateLikeField();
+	if (stringTypes[schemaType].includes(type)) return generateStringLikeField();
+	if (numberTypes[schemaType].includes(type)) return generateNumberLikeField();
+	if (booleanTypes[schemaType].includes(type))
+		return generateBooleanLikeField();
+	if (schemaType !== "sqlite" && enumTypes[schemaType].includes(type))
+		return generateEnumLikeField();
+	throw new Error(`Unsupported column type: ${type}`);
 }
 
 export async function generate(config: Config) {
-  let tables: string[] = []
-  let prismaTables: (Model | null)[] = []
-  let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null
-  const db =
-    config.origin.type === 'mysql'
-      ? knex({
-          client: 'mysql2',
-          connection: {
-            host: config.origin.host,
-            port: config.origin.port,
-            user: config.origin.user,
-            password: config.origin.password,
-            database: config.origin.database,
-            ssl: config.ssl,
-          },
-        })
-      : null
-  const isCamelCase = config.camelCase && config.camelCase === true
-  if (config.origin.type === 'prisma') {
-    const schemaContents = readFileSync(config.origin.path).toString()
-    schema = createPrismaSchemaBuilder(schemaContents)
-    prismaTables = schema.findAllByType('model', {})
-    tables = prismaTables.filter((t) => t !== null).map((table) => table.name)
-  } else {
-    const t: { table_name: string }[][] = await db!.raw(
-      'SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ?',
-      [config.origin.database],
-    )
-    tables = t[0].map((row) => row.table_name).sort()
-  }
-  const dests: string[] = []
+	let tables: string[] = [];
+	let prismaTables: (Model | null)[] = [];
+	let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null;
+	let db = null;
 
-  const includedTables = config.tables
-  if (includedTables?.length)
-    tables = tables.filter((table) => includedTables.includes(table))
+	if (config.origin.type === "mysql") {
+		db = knex({
+			client: "mysql2",
+			connection: {
+				host: config.origin.host,
+				port: config.origin.port,
+				user: config.origin.user,
+				password: config.origin.password,
+				database: config.origin.database,
+				ssl: config.ssl,
+			},
+		});
+	} else if (config.origin.type === "postgres") {
+		db = knex({
+			client: "pg",
+			connection: {
+				host: config.origin.host,
+				port: config.origin.port,
+				user: config.origin.user,
+				password: config.origin.password,
+				database: config.origin.database,
+				ssl: config.ssl,
+			},
+		});
+	} else if (config.origin.type === "sqlite") {
+		db = knex({
+			client: "sqlite3",
+			connection: {
+				filename: config.origin.path,
+			},
+			useNullAsDefault: true,
+		});
+	}
 
-  const allIgnoredTables = config.ignore
-  const ignoredTablesRegex = allIgnoredTables?.filter((ignoreString) => {
-    return ignoreString.startsWith('/') && ignoreString.endsWith('/')
-  })
-  const ignoredTableNames = allIgnoredTables?.filter(
-    (table) => !ignoredTablesRegex?.includes(table),
-  )
-  if (ignoredTableNames?.length)
-    tables = tables.filter((table) => !ignoredTableNames.includes(table))
+	const isCamelCase = config.camelCase && config.camelCase === true;
+	if (config.origin.type === "prisma") {
+		const schemaContents = readFileSync(config.origin.path).toString();
+		schema = createPrismaSchemaBuilder(schemaContents);
+		prismaTables = schema.findAllByType("model", {});
+		tables = prismaTables.filter((t) => t !== null).map((table) => table.name);
+	} else if (config.origin.type === "mysql") {
+		const t: { table_name: string }[][] = await db!.raw(
+			"SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ?",
+			[config.origin.database],
+		);
+		tables = t[0].map((row) => row.table_name).sort();
+	} else if (config.origin.type === "postgres") {
+		const schema = config.origin.schema || "public";
+		const t = await db!.raw(
+			"SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = ?",
+			[schema, "BASE TABLE"],
+		);
+		tables = t.rows.map((row: { table_name: string }) => row.table_name).sort();
+	} else if (config.origin.type === "sqlite") {
+		const t = await db!.raw(
+			"SELECT name as table_name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+		);
+		tables = t.map((row: { table_name: string }) => row.table_name).sort();
+	}
+	const dests: string[] = [];
 
-  if (ignoredTablesRegex?.length) {
-    tables = tables.filter((table) => {
-      let useTable = true
-      for (const text of ignoredTablesRegex) {
-        const pattern = text.substring(1, text.length - 1)
-        if (table.match(pattern) !== null) useTable = false
-      }
-      return useTable
-    })
-  }
+	const includedTables = config.tables;
+	if (includedTables?.length)
+		tables = tables.filter((table) => includedTables.includes(table));
 
-  let describes: Desc[] = []
+	const allIgnoredTables = config.ignore;
+	const ignoredTablesRegex = allIgnoredTables?.filter((ignoreString) => {
+		return ignoreString.startsWith("/") && ignoreString.endsWith("/");
+	});
+	const ignoredTableNames = allIgnoredTables?.filter(
+		(table) => !ignoredTablesRegex?.includes(table),
+	);
+	if (ignoredTableNames?.length)
+		tables = tables.filter((table) => !ignoredTableNames.includes(table));
 
-  for (let table of tables) {
-    if (config.origin.type === 'mysql') {
-      const d = await db!.raw(`SHOW FULL COLUMNS FROM ${table}`)
-      describes = d[0] as Desc[]
-    } else {
-      const prismaTable = prismaTables.find((t) => t?.name === table) as Model
-      let enumOptions: string[] | undefined
-      describes = prismaTable.properties
-        .filter(
-          (p): p is Field =>
-            p.type === 'field' &&
-            p.array !== true &&
-            !p.attributes?.find((a) => a.name === 'relation'),
-        )
-        .map((field) => {
-          let defaultGenerated = false
-          const defaultValueField = field.attributes
-            ? field.attributes.find((a) => a.name === 'default')
-            : null
-          const defaultValue = defaultValueField?.args?.[0].value
-          if (
-            typeof defaultValue === 'object' &&
-            // @ts-ignore
-            defaultValue?.type === 'function'
-          ) {
-            defaultGenerated = true
-          }
-          const parsedDefaultValue =
-            defaultValue !== undefined && typeof defaultValue !== 'object'
-              ? defaultValue.toString().replace(/"/g, '')
-              : null
-          let fieldType = field.fieldType.toString()
-          if (!prismaValidTypes.includes(fieldType)) {
-            enumOptions = schema!
-              .findAllByType('enum', {
-                name: fieldType,
-              })[0]
-              ?.enumerators.filter(
-                (e): e is Enumerator => e.type === 'enumerator',
-              )
-              .map((e) => {
-                const attrs = e.attributes?.find((a) => a.name === 'map')
-                return attrs?.args
-                  ? attrs.args[0].value.toString().replace(/"/g, '')
-                  : e.name
-              })
-            fieldType = 'Enum'
-          }
-          return {
-            Field: field.name,
-            Default: parsedDefaultValue,
-            EnumOptions: enumOptions,
-            Extra: defaultGenerated ? 'DEFAULT_GENERATED' : '',
-            Type: fieldType,
-            Null: field.optional ? 'YES' : 'NO',
-            Comment: field.comment ?? '',
-          }
-        })
-    }
-    if (isCamelCase) table = camelCase(table)
-    let content = `import { z } from 'zod'
+	if (ignoredTablesRegex?.length) {
+		tables = tables.filter((table) => {
+			let useTable = true;
+			for (const text of ignoredTablesRegex) {
+				const pattern = text.substring(1, text.length - 1);
+				if (table.match(pattern) !== null) useTable = false;
+			}
+			return useTable;
+		});
+	}
 
-export const ${table} = z.object({`
-    for (const desc of describes) {
-      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const type = getType('table', desc, config)
-      if (type) {
-        content = `${content}
-	${field}: ${type},`
-      }
-    }
-    content = `${content}
+	let describes: Desc[] = [];
+
+	for (let table of tables) {
+		if (config.origin.type === "mysql") {
+			const d = await db!.raw(`SHOW FULL COLUMNS FROM ${table}`);
+			describes = d[0] as Desc[];
+		} else if (config.origin.type === "postgres") {
+			const schema = config.origin.schema || "public";
+			const d = await db!.raw(
+				`
+				SELECT
+					column_name as "Field",
+					column_default as "Default",
+					CASE WHEN is_nullable = 'YES' THEN 'YES' ELSE 'NO' END as "Null",
+					data_type as "Type",
+					'' as "Extra",
+					col_description(('"'||$1||'"."'||$2||'"')::regclass::oid, ordinal_position) as "Comment"
+				FROM
+					information_schema.columns
+				WHERE
+					table_schema = $1 AND table_name = $2
+				ORDER BY
+					ordinal_position
+			`,
+				[schema, table],
+			);
+
+			// Handle enum types
+			for (const column of d.rows) {
+				if (column.Type === "USER-DEFINED") {
+					// Get enum values
+					const enumValues = await db!.raw(
+						`
+						SELECT
+							e.enumlabel
+						FROM
+							pg_type t
+							JOIN pg_enum e ON t.oid = e.enumtypid
+							JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+						WHERE
+							t.typname = (
+								SELECT udt_name
+								FROM information_schema.columns
+								WHERE table_schema = $1
+								AND table_name = $2
+								AND column_name = $3
+							)
+						ORDER BY
+							e.enumsortorder
+					`,
+						[schema, table, column.Field],
+					);
+
+					column.EnumOptions = enumValues.rows.map(
+						(row: { enumlabel: string }) => row.enumlabel,
+					);
+				}
+			}
+
+			describes = d.rows as Desc[];
+		} else if (config.origin.type === "sqlite") {
+			// Get table info
+			const d = await db!.raw(`PRAGMA table_info(${table})`);
+
+			// SQLite doesn't have a built-in way to get comments, so we'll set them as empty
+			describes = d.map(
+				(row: {
+					name: string;
+					dflt_value: string | null;
+					notnull: number;
+					type: string;
+				}) => ({
+					Field: row.name,
+					Default: row.dflt_value,
+					Null: row.notnull === 0 ? "YES" : "NO",
+					Type: row.type.toLowerCase(),
+					Extra: "",
+					Comment: "",
+				}),
+			);
+		} else {
+			const prismaTable = prismaTables.find((t) => t?.name === table) as Model;
+			let enumOptions: string[] | undefined;
+			describes = prismaTable.properties
+				.filter(
+					(p): p is Field =>
+						p.type === "field" &&
+						p.array !== true &&
+						!p.attributes?.find((a) => a.name === "relation"),
+				)
+				.map((field) => {
+					let defaultGenerated = false;
+					const defaultValueField = field.attributes
+						? field.attributes.find((a) => a.name === "default")
+						: null;
+					const defaultValue = defaultValueField?.args?.[0].value;
+					if (
+						typeof defaultValue === "object" &&
+						// @ts-ignore
+						defaultValue?.type === "function"
+					) {
+						defaultGenerated = true;
+					}
+					const parsedDefaultValue =
+						defaultValue !== undefined && typeof defaultValue !== "object"
+							? defaultValue.toString().replace(/"/g, "")
+							: null;
+					let fieldType = field.fieldType.toString();
+					if (!prismaValidTypes.includes(fieldType)) {
+						enumOptions = schema!
+							.findAllByType("enum", {
+								name: fieldType,
+							})[0]
+							?.enumerators.filter(
+								(e): e is Enumerator => e.type === "enumerator",
+							)
+							.map((e) => {
+								const attrs = e.attributes?.find((a) => a.name === "map");
+								return attrs?.args
+									? attrs.args[0].value.toString().replace(/"/g, "")
+									: e.name;
+							});
+						fieldType = "Enum";
+					}
+					return {
+						Field: field.name,
+						Default: parsedDefaultValue,
+						EnumOptions: enumOptions,
+						Extra: defaultGenerated ? "DEFAULT_GENERATED" : "",
+						Type: fieldType,
+						Null: field.optional ? "YES" : "NO",
+						Comment: field.comment ?? "",
+					};
+				});
+		}
+		if (isCamelCase) table = camelCase(table);
+		let content = `import { z } from 'zod'
+
+export const ${table} = z.object({`;
+		for (const desc of describes) {
+			const field = isCamelCase ? camelCase(desc.Field) : desc.Field;
+			const type = getType("table", desc, config);
+			if (type) {
+				content = `${content}
+	${field}: ${type},`;
+			}
+		}
+		content = `${content}
 })
 
-export const insertable_${table} = z.object({`
-    for (const desc of describes) {
-      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const type = getType('insertable', desc, config)
-      if (type) {
-        content = `${content}
-  ${field}: ${type},`
-      }
-    }
-    content = `${content}
+export const insertable_${table} = z.object({`;
+		for (const desc of describes) {
+			const field = isCamelCase ? camelCase(desc.Field) : desc.Field;
+			const type = getType("insertable", desc, config);
+			if (type) {
+				content = `${content}
+  ${field}: ${type},`;
+			}
+		}
+		content = `${content}
 })
 
-export const updateable_${table} = z.object({`
-    for (const desc of describes) {
-      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const type = getType('updateable', desc, config)
-      if (type) {
-        content = `${content}
-  ${field}: ${type},`
-      }
-    }
-    content = `${content}
+export const updateable_${table} = z.object({`;
+		for (const desc of describes) {
+			const field = isCamelCase ? camelCase(desc.Field) : desc.Field;
+			const type = getType("updateable", desc, config);
+			if (type) {
+				content = `${content}
+  ${field}: ${type},`;
+			}
+		}
+		content = `${content}
 })
 
-export const selectable_${table} = z.object({`
-    for (const desc of describes) {
-      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const type = getType('selectable', desc, config)
-      if (type) {
-        content = `${content}
-  ${field}: ${type},`
-      }
-    }
-    content = `${content}
+export const selectable_${table} = z.object({`;
+		for (const desc of describes) {
+			const field = isCamelCase ? camelCase(desc.Field) : desc.Field;
+			const type = getType("selectable", desc, config);
+			if (type) {
+				content = `${content}
+  ${field}: ${type},`;
+			}
+		}
+		content = `${content}
 })
 
 export type ${camelCase(`${table}Type`, {
-      pascalCase: true,
-    })} = z.infer<typeof ${table}>
+			pascalCase: true,
+		})} = z.infer<typeof ${table}>
 export type Insertable${camelCase(`${table}Type`, {
-      pascalCase: true,
-    })} = z.infer<typeof insertable_${table}>
+			pascalCase: true,
+		})} = z.infer<typeof insertable_${table}>
 export type Updateable${camelCase(`${table}Type`, {
-      pascalCase: true,
-    })} = z.infer<typeof updateable_${table}>
+			pascalCase: true,
+		})} = z.infer<typeof updateable_${table}>
 export type Selectable${camelCase(`${table}Type`, {
-      pascalCase: true,
-    })} = z.infer<typeof selectable_${table}>
-`
-    const dir = config.folder && config.folder !== '' ? config.folder : '.'
-    const file =
-      config.suffix && config.suffix !== ''
-        ? `${table}.${config.suffix}.ts`
-        : `${table}.ts`
-    const dest = path.join(dir, file)
-    dests.push(dest)
-    if (!config.silent) console.log('Created:', dest)
-    fs.outputFileSync(dest, content)
-  }
-  if (config.origin.type === 'mysql') {
-    await db!.destroy()
-  }
-  return dests
+			pascalCase: true,
+		})} = z.infer<typeof selectable_${table}>
+`;
+		const dir = config.folder && config.folder !== "" ? config.folder : ".";
+		const file =
+			config.suffix && config.suffix !== ""
+				? `${table}.${config.suffix}.ts`
+				: `${table}.ts`;
+		const dest = path.join(dir, file);
+		dests.push(dest);
+		if (!config.silent) console.log("Created:", dest);
+		fs.outputFileSync(dest, content);
+	}
+	if (
+		config.origin.type === "mysql" ||
+		config.origin.type === "postgres" ||
+		config.origin.type === "sqlite"
+	) {
+		await db!.destroy();
+	}
+	return dests;
 }
 
-type ValidTypes =
-  | 'date'
-  | 'datetime'
-  | 'timestamp'
-  | 'time'
-  | 'year'
-  | 'char'
-  | 'varchar'
-  | 'tinytext'
-  | 'text'
-  | 'mediumtext'
-  | 'longtext'
-  | 'json'
-  | 'decimal'
-  | 'tinyint'
-  | 'smallint'
-  | 'mediumint'
-  | 'int'
-  | 'bigint'
-  | 'float'
-  | 'double'
+// MySQL valid types
+type MySQLValidTypes =
+	| "date"
+	| "datetime"
+	| "timestamp"
+	| "time"
+	| "year"
+	| "char"
+	| "varchar"
+	| "tinytext"
+	| "text"
+	| "mediumtext"
+	| "longtext"
+	| "json"
+	| "decimal"
+	| "tinyint"
+	| "smallint"
+	| "mediumint"
+	| "int"
+	| "bigint"
+	| "float"
+	| "double"
+	| "enum";
+
+// PostgreSQL valid types
+type PostgresValidTypes =
+	| "date"
+	| "timestamp"
+	| "timestamptz"
+	| "timestamp without time zone"
+	| "timestamp with time zone"
+	| "time"
+	| "timetz"
+	| "interval"
+	| "character"
+	| "varchar"
+	| "character varying"
+	| "text"
+	| "json"
+	| "jsonb"
+	| "uuid"
+	| "name"
+	| "citext"
+	| "numeric"
+	| "decimal"
+	| "smallint"
+	| "integer"
+	| "bigint"
+	| "real"
+	| "double precision"
+	| "serial"
+	| "bigserial"
+	| "boolean"
+	| "bool"
+	| "USER-DEFINED";
+
+// SQLite valid types
+type SQLiteValidTypes =
+	| "datetime"
+	| "text"
+	| "character"
+	| "varchar"
+	| "varying character"
+	| "nchar"
+	| "native character"
+	| "nvarchar"
+	| "clob"
+	| "json"
+	| "int"
+	| "integer"
+	| "tinyint"
+	| "smallint"
+	| "mediumint"
+	| "bigint"
+	| "unsigned big int"
+	| "int2"
+	| "int8"
+	| "real"
+	| "double"
+	| "double precision"
+	| "float"
+	| "numeric"
+	| "decimal"
+	| "boolean";
+
+// Prisma valid types
+type PrismaValidTypes =
+	| "DateTime"
+	| "String"
+	| "Decimal"
+	| "BigInt"
+	| "Bytes"
+	| "Json"
+	| "Int"
+	| "Float"
+	| "Boolean"
+	| "Enum";
+
+// Each database type has its own set of valid types defined above
 
 export interface Desc {
-  Field: string
-  Default: string | null
-  EnumOptions?: string[]
-  Extra: string
-  Type: string
-  Null: 'YES' | 'NO'
-  Comment: string
+	Field: string;
+	Default: string | null;
+	EnumOptions?: string[];
+	Extra: string;
+	Type: string;
+	Null: "YES" | "NO";
+	Comment: string;
 }
 export interface Config {
-  origin:
-    | {
-        type: 'prisma'
-        path: string
-      }
-    | {
-        type: 'mysql'
-        host: string
-        port: number
-        user: string
-        password: string
-        database: string
-      }
-  tables?: string[]
-  ignore?: string[]
-  folder?: string
-  suffix?: string
-  camelCase?: boolean
-  nullish?: boolean
-  requiredString?: boolean
-  useDateType?: boolean
-  useTrim?: boolean
-  silent?: boolean
-  zodCommentTypes?: boolean
-  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-  ssl?: Record<string, any>
-  overrideTypes?: { [k in ValidTypes]?: string }
+	origin:
+		| {
+				type: "prisma";
+				path: string;
+				overrideTypes?: { [k in PrismaValidTypes]?: string };
+		  }
+		| {
+				type: "mysql";
+				host: string;
+				port: number;
+				user: string;
+				password: string;
+				database: string;
+				overrideTypes?: { [k in MySQLValidTypes]?: string };
+		  }
+		| {
+				type: "postgres";
+				host: string;
+				port: number;
+				user: string;
+				password: string;
+				database: string;
+				schema?: string;
+				overrideTypes?: { [k in PostgresValidTypes]?: string };
+		  }
+		| {
+				type: "sqlite";
+				path: string;
+				overrideTypes?: { [k in SQLiteValidTypes]?: string };
+		  };
+	tables?: string[];
+	ignore?: string[];
+	folder?: string;
+	suffix?: string;
+	camelCase?: boolean;
+	nullish?: boolean;
+	requiredString?: boolean;
+	useDateType?: boolean;
+	useTrim?: boolean;
+	silent?: boolean;
+	magicComments?: boolean;
+	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+	ssl?: Record<string, any>;
 }
