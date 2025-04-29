@@ -9,6 +9,7 @@ Converts Prisma/MySQL/PostgreSQL/SQLite schemas to Zod schemas, TypeScript inter
 - Handles nullable, default, auto-increment and enum fields
 - Supports custom type overrides via configuration or database comments
 - Intelligently handles field nullability based on operation type (table, insertable, updateable, selectable)
+- All fields in updateable schemas are automatically made optional
 
 ## Installation
 
@@ -57,7 +58,7 @@ await generate({
     type: 'zod',
     useDateType: true,
     useTrim: false,
-    nullish: false,
+    nullish: false, // When true, nullable fields use nullish() instead of nullable()
     folder: './generated',
     suffix: 'schema'
   }]
@@ -303,11 +304,11 @@ export const insertable_user = z.object({
 })
 
 export const updateable_user = z.object({
-  name: z.string().min(10).max(255),
-  username: z.string(),
-  password: z.string(),
-  profile_picture: z.string().nullable(),
-  role: z.enum(['admin', 'user']),
+  name: z.string().min(10).max(255).optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  profile_picture: z.string().nullable().optional(),
+  role: z.enum(['admin', 'user']).optional(),
 })
 
 export const selectable_user = z.object({
@@ -372,92 +373,6 @@ export interface SelectableUser {
 }
 ```
 
-### TypeScript Interface Output Example (Enum Type for Enums)
-
-```typescript
-// TypeScript interfaces for user
-
-// Enum declarations
-enum RoleEnum {
-  admin = 'admin',
-  user = 'user'
-}
-
-export interface User {
-  id: number;
-  name: string;
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  role: RoleEnum;
-}
-
-export interface InsertableUser {
-  name: string | null; // Optional because it has a default value
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  role: RoleEnum;
-}
-
-export interface UpdateableUser {
-  name: string | null; // Optional for updates
-  username: string | null; // Optional for updates
-  password: string | null; // Optional for updates
-  profile_picture: string | null;
-  role: RoleEnum | null; // Optional for updates
-}
-
-export interface SelectableUser {
-  id: number;
-  name: string;
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  role: RoleEnum;
-}
-```
-
-### TypeScript Type Alias Output Example
-
-```typescript
-// TypeScript types for user
-
-export type User = {
-  id: number;
-  name: string;
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  role: 'admin' | 'user';
-}
-
-export type InsertableUser = {
-  name: string | null; // Optional because it has a default value
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  role: 'admin' | 'user';
-}
-
-export type UpdateableUser = {
-  name: string | null; // Optional for updates
-  username: string | null; // Optional for updates
-  password: string | null; // Optional for updates
-  profile_picture: string | null;
-  role: 'admin' | 'user' | null; // Optional for updates
-}
-
-export type SelectableUser = {
-  id: number;
-  name: string;
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  role: 'admin' | 'user';
-}
-```
-
 ### Kysely Type Definitions Output Example
 
 ```typescript
@@ -491,49 +406,6 @@ export interface UserTable {
 
 // Define the database interface
 export interface DB {
-  user: UserTable;
-}
-
-// Use these types for inserting, selecting and updating the table
-export type User = Selectable<UserTable>;
-export type NewUser = Insertable<UserTable>;
-export type UserUpdate = Updateable<UserTable>;
-```
-
-### Kysely Type Definitions Output Example with Custom Schema Name
-
-```typescript
-import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';
-import { CustomTypes } from './types';
-
-// JSON type definitions
-export type Json = ColumnType<JsonValue, string, string>;
-
-export type JsonArray = JsonValue[];
-
-export type JsonObject = {
-  [x: string]: JsonValue | undefined;
-};
-
-export type JsonPrimitive = boolean | number | string | null;
-
-export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
-
-// Kysely type definitions for user
-
-// This interface defines the structure of the 'user' table
-export interface UserTable {
-  id: Generated<number>;
-  name: string;
-  username: string;
-  password: string;
-  profile_picture: string | null;
-  metadata: Json;
-  role: 'admin' | 'user';
-}
-
-// Define the database interface
-export interface Database {
   user: UserTable;
 }
 
@@ -596,8 +468,8 @@ export type UserUpdate = Updateable<UserTable>;
       "type": "zod",
       "useDateType": true,
       "useTrim": false,
-      "nullish": false,
-      "requiredString": false,
+      "nullish": false, // When true, nullable fields use nullish() instead of nullable()
+      "requiredString": false, // When true, adds min(1) validation to non-nullable string fields
       "header": "import { z } from 'zod';\nimport { CustomValidator } from './validators';",
       "folder": "@zod",
       "suffix": "table"
@@ -633,8 +505,8 @@ export type UserUpdate = Updateable<UserTable>;
 | destinations[].type | The type of output to generate: "zod", "ts", or "kysely" |
 | destinations[].useDateType | (Zod only) Use a specialized Zod type for date-like fields instead of string |
 | destinations[].useTrim | (Zod only) Use `z.string().trim()` instead of `z.string()` |
-| destinations[].nullish | (Zod only) Set schema as `nullish` instead of `nullable` |
-| destinations[].requiredString | (Zod only) Add `min(1)` for string schema |
+| destinations[].nullish | (Zod only) Use `nullish()` instead of `nullable()` for nullable fields. In updateable schemas, fields that were already nullable will become nullish |
+| destinations[].requiredString | (Zod only) Add `min(1)` for non-nullable string fields |
 | destinations[].enumType | (TypeScript only) How to represent enum types: "union" (default) or "enum" |
 | destinations[].modelType | (TypeScript only) How to represent models: "interface" (default) or "type" |
 | destinations[].schemaName | (Kysely only) Name of the database interface (default: "DB") |
