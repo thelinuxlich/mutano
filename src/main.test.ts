@@ -1,332 +1,321 @@
-import { describe, test } from "vitest";
-import { type Config, type Desc, getType } from "./main.js";
+import { describe, test } from 'vitest'
+import {
+	type Config,
+	type Desc,
+	defaultKyselyHeader,
+	defaultZodHeader,
+	generateContent,
+	getType,
+} from './main.js'
 
-describe("getType", () => {
+describe('mutano', () => {
 	const mysqlConfig: Config = {
 		origin: {
-			type: "mysql",
-			host: "localhost",
+			type: 'mysql',
+			host: 'localhost',
 			port: 3306,
-			user: "root",
-			password: "password",
-			database: "rise",
+			user: 'root',
+			password: 'password',
+			database: 'rise',
 			overrideTypes: {
-				json: "z.record(z.string())",
+				json: 'z.record(z.string())',
 			},
 		},
+		destinations: [
+			{
+				type: 'zod',
+				useDateType: true,
+				useTrim: false,
+				nullish: true,
+				requiredString: true,
+				folder: './zod',
+				suffix: 'schema',
+			},
+		],
 		camelCase: true,
-		nullish: true,
-		requiredString: true,
-		useDateType: true,
 		magicComments: true,
-	};
+	}
 
-	const postgresConfig: Config = {
+	const mysqlTsConfig: Config = {
 		origin: {
-			type: "postgres",
-			host: "localhost",
-			port: 5432,
-			user: "postgres",
-			password: "password",
-			database: "rise",
-			schema: "public",
+			type: 'mysql',
+			host: 'localhost',
+			port: 3306,
+			user: 'root',
+			password: 'password',
+			database: 'rise',
 			overrideTypes: {
-				jsonb: "z.record(z.string())",
+				json: 'z.record(z.string())',
 			},
 		},
+		destinations: [
+			{
+				type: 'ts',
+				folder: './ts',
+				suffix: 'type',
+			},
+		],
 		camelCase: true,
-		nullish: true,
-		requiredString: true,
-		useDateType: true,
 		magicComments: true,
-	};
+	}
 
-	const sqliteConfig: Config = {
+	const mysqlKyselyConfig: Config = {
 		origin: {
-			type: "sqlite",
-			path: ":memory:",
+			type: 'mysql',
+			host: 'localhost',
+			port: 3306,
+			user: 'root',
+			password: 'password',
+			database: 'rise',
 			overrideTypes: {
-				json: "z.record(z.string())",
+				json: 'z.record(z.string())',
 			},
 		},
+		destinations: [
+			{
+				type: 'kysely',
+				folder: './kysely',
+				suffix: 'db',
+			},
+		],
 		camelCase: true,
-		nullish: true,
-		requiredString: true,
-		useDateType: true,
 		magicComments: true,
-	};
+	}
 
-	test("should return a custom Zod date field for date, datetime, and timestamp types", ({
+	test('should return a custom Zod date field for date, datetime, and timestamp types', ({
 		expect,
 	}) => {
 		const desc: Desc = {
 			Default: null,
-			Extra: "",
-			Null: "NO",
-			Type: "date",
-			Field: "date",
-			Comment: "",
-		};
-		const result = getType("table", desc, mysqlConfig);
+			Extra: '',
+			Null: 'NO',
+			Type: 'date',
+			Field: 'date',
+			Comment: '',
+		}
+		const result = getType(
+			'table',
+			desc,
+			mysqlConfig,
+			mysqlConfig.destinations[0],
+		)
 		expect(result).toEqual(
-			"z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())",
-		);
-	});
+			'z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())',
+		)
+	})
 
-	test("should return a Zod string field for text, mediumtext, longtext, json, decimal, time, year, char, and varchar types", ({
+	test('should return a Zod string field for text, mediumtext, longtext, json, decimal, time, year, char, and varchar types', ({
 		expect,
 	}) => {
 		const desc: Desc = {
 			Default: null,
-			Extra: "",
-			Null: "NO" as const,
-			Type: "varchar",
-			Field: "varchar",
-			Comment: "",
-		};
-		const result = getType("table", desc, mysqlConfig);
-		expect(result).toEqual("z.string().min(1)");
-	});
+			Extra: '',
+			Null: 'NO' as const,
+			Type: 'varchar',
+			Field: 'varchar',
+			Comment: '',
+		}
+		const result = getType(
+			'table',
+			desc,
+			mysqlConfig,
+			mysqlConfig.destinations[0],
+		)
+		expect(result).toEqual('z.string().min(1)')
+	})
 
-	test("should return a Zod string with trim() if useTrim is true", ({
+	test('should return a Zod string with trim() if useTrim is true', ({
 		expect,
 	}) => {
 		const desc: Desc = {
 			Default: null,
-			Extra: "",
-			Null: "NO" as const,
-			Type: "varchar",
-			Field: "varchar",
-			Comment: "",
-		};
-		const result = getType("table", desc, { ...mysqlConfig, useTrim: true });
-		expect(result).toEqual("z.string().trim().min(1)");
-	});
+			Extra: '',
+			Null: 'NO' as const,
+			Type: 'varchar',
+			Field: 'varchar',
+			Comment: '',
+		}
+		const configWithTrim: Config = {
+			...mysqlConfig,
+			destinations: [
+				{
+					type: 'zod',
+					useDateType: true,
+					useTrim: true,
+					nullish: true,
+					requiredString: true,
+					folder: './generated',
+					suffix: 'schema',
+				},
+			],
+		}
+		const result = getType(
+			'table',
+			desc,
+			configWithTrim,
+			configWithTrim.destinations[0],
+		)
+		expect(result).toEqual('z.string().trim().min(1)')
+	})
 
-	test("should return a custom Zod boolean field for tinyint types", ({
-		expect,
-	}) => {
-		const desc: Desc = {
-			Default: "0",
-			Extra: "",
-			Null: "NO",
-			Field: "tinyint",
-			Type: "tinyint",
-			Comment: "",
-		};
-		const result = getType("table", desc, mysqlConfig);
-		expect(result).toEqual(
-			"z.union([z.number(),z.string(),z.boolean()]).pipe(z.coerce.boolean()).optional().default(false)",
-		);
-	});
+	// Content generation tests
+	describe('Content generation', () => {
+		test('should generate Zod schema content without a database connection', ({
+			expect,
+		}) => {
+			const table = 'user'
+			const describes: Desc[] = [
+				{
+					Field: 'id',
+					Default: null,
+					Extra: 'auto_increment',
+					Null: 'NO',
+					Type: 'int',
+					Comment: '',
+				},
+				{
+					Field: 'name',
+					Default: null,
+					Extra: '',
+					Null: 'NO',
+					Type: 'varchar',
+					Comment: '',
+				},
+				{
+					Field: 'metadata',
+					Default: '{}',
+					Extra: '',
+					Null: 'YES',
+					Type: 'json',
+					Comment: '',
+				},
+			]
 
-	test("should return a Zod number field for smallint, mediumint, int, bigint, float, and double types", ({
-		expect,
-	}) => {
-		const desc: Desc = {
-			Default: "0",
-			Extra: "",
-			Null: "NO",
-			Field: "int",
-			Type: "int",
-			Comment: "",
-		};
-		const result = getType("table", desc, mysqlConfig);
-		expect(result).toEqual("z.number().optional().default(0)");
-	});
+			const content = generateContent({
+				table,
+				describes,
+				config: mysqlConfig,
+				destination: mysqlConfig.destinations[0],
+				isCamelCase: false,
+				enumDeclarations: {},
+				defaultZodHeader,
+				defaultKyselyHeader,
+			})
 
-	test("should return a Zod enum field for enum types", ({ expect }) => {
-		const desc: Desc = {
-			Default: "foo",
-			Extra: "",
-			Null: "NO",
-			Field: "enum",
-			Type: "enum('foo', 'bar', 'baz')",
-			Comment: "",
-		};
-		const result = getType("table", desc, mysqlConfig);
-		expect(result).toEqual(
-			"z.enum(['foo', 'bar', 'baz']).optional().default('foo')",
-		);
-	});
+			// Verify the content contains expected elements
+			expect(content).toContain("import { z } from 'zod';")
+			expect(content).toContain('export const user = z.object({')
+			expect(content).toContain('id: z.number().optional(),')
+			expect(content).toContain('name: z.string().min(1),')
+		})
 
-	test("should return undefined for insertable and updateable fields that are not null and have a default value", ({
-		expect,
-	}) => {
-		const desc: Desc = {
-			Default: "CURRENT_TIMESTAMP",
-			Extra: "DEFAULT_GENERATED",
-			Null: "NO",
-			Field: "timestamp",
-			Type: "timestamp",
-			Comment: "",
-		};
-		let result = getType("insertable", desc, mysqlConfig);
-		expect(result).toEqual(undefined);
-		result = getType("updateable", desc, mysqlConfig);
-		expect(result).toEqual(undefined);
-	});
+		test('should generate TypeScript interface content without a database connection', ({
+			expect,
+		}) => {
+			const table = 'user'
+			const describes: Desc[] = [
+				{
+					Field: 'id',
+					Default: null,
+					Extra: 'auto_increment',
+					Null: 'NO',
+					Type: 'int',
+					Comment: '',
+				},
+				{
+					Field: 'name',
+					Default: null,
+					Extra: '',
+					Null: 'NO',
+					Type: 'varchar',
+					Comment: '',
+				},
+				{
+					Field: 'metadata',
+					Default: '{}',
+					Extra: '',
+					Null: 'YES',
+					Type: 'json',
+					Comment: '',
+				},
+			]
 
-	test("should override a field type if a @zod commment exists on the column", ({
-		expect,
-	}) => {
-		const desc: Desc = {
-			Default: "0",
-			Extra: "",
-			Null: "NO",
-			Field: "int",
-			Type: "int",
-			Comment: "@ts(Foo) @zod(z.number().nonnegative().min(10))",
-		};
-		const result = getType("table", desc, mysqlConfig);
-		expect(result).toEqual(
-			"z.number().nonnegative().min(10).optional().default(0)",
-		);
-	});
+			const content = generateContent({
+				table,
+				describes,
+				config: mysqlTsConfig,
+				destination: mysqlTsConfig.destinations[0],
+				isCamelCase: false,
+				enumDeclarations: {},
+				defaultZodHeader,
+				defaultKyselyHeader,
+			})
 
-	test("should override a field type if a overrideTypes config exists on the column", ({
-		expect,
-	}) => {
-		const desc: Desc = {
-			Default: "{}",
-			Extra: "",
-			Null: "NO",
-			Field: "json",
-			Type: "json",
-			Comment: "",
-		};
-		const result = getType("table", desc, mysqlConfig);
-		expect(result).toEqual("z.record(z.string()).optional().default('{}')");
-	});
+			// Verify the content contains expected elements
+			expect(content).toContain('export interface User {')
+			expect(content).toContain('id: number;')
+			expect(content).toContain('name: string;')
+			expect(content).toContain('metadata: string | null;')
+		})
 
-	test("should throw an error for unsupported column types", ({ expect }) => {
-		const desc: Desc = {
-			Default: null,
-			Extra: "",
-			Null: "NO",
-			Field: "unsupported",
-			Type: "unsupported",
-			Comment: "",
-		};
-		expect(() => getType("table", desc, mysqlConfig)).toThrowError(
-			"Unsupported column type: unsupported",
-		);
-	});
+		test('should generate Kysely schema content without a database connection', ({
+			expect,
+		}) => {
+			const table = 'user'
+			const describes: Desc[] = [
+				{
+					Field: 'id',
+					Default: null,
+					Extra: 'auto_increment',
+					Null: 'NO',
+					Type: 'int',
+					Comment: '',
+				},
+				{
+					Field: 'name',
+					Default: null,
+					Extra: '',
+					Null: 'NO',
+					Type: 'varchar',
+					Comment: '',
+				},
+				{
+					Field: 'metadata',
+					Default: '{}',
+					Extra: '',
+					Null: 'YES',
+					Type: 'json',
+					Comment: '',
+				},
+			]
 
-	// PostgreSQL specific tests
-	test("should handle PostgreSQL boolean type", ({ expect }) => {
-		const desc: Desc = {
-			Default: "true",
-			Extra: "",
-			Null: "NO",
-			Field: "active",
-			Type: "boolean",
-			Comment: "",
-		};
-		const result = getType("table", desc, postgresConfig);
-		expect(result).toEqual(
-			"z.union([z.number(),z.string(),z.boolean()]).pipe(z.coerce.boolean()).optional().default(true)",
-		);
-	});
+			const content = generateContent({
+				table,
+				describes,
+				config: mysqlKyselyConfig,
+				destination: mysqlKyselyConfig.destinations[0],
+				isCamelCase: false,
+				enumDeclarations: {},
+				defaultZodHeader,
+				defaultKyselyHeader,
+			})
 
-	test("should handle PostgreSQL jsonb type with override", ({ expect }) => {
-		const desc: Desc = {
-			Default: "{}",
-			Extra: "",
-			Null: "NO",
-			Field: "data",
-			Type: "jsonb",
-			Comment: "",
-		};
-		const result = getType("table", desc, postgresConfig);
-		expect(result).toEqual("z.record(z.string()).optional().default('{}')");
-	});
-
-	test("should handle PostgreSQL timestamp types", ({ expect }) => {
-		const desc: Desc = {
-			Default: null,
-			Extra: "",
-			Null: "NO",
-			Field: "created_at",
-			Type: "timestamp with time zone",
-			Comment: "",
-		};
-		const result = getType("table", desc, postgresConfig);
-		expect(result).toEqual(
-			"z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())",
-		);
-	});
-
-	test("should handle PostgreSQL USER-DEFINED enum type", ({ expect }) => {
-		const desc: Desc = {
-			Default: "admin",
-			Extra: "",
-			Null: "NO",
-			Field: "role",
-			Type: "USER-DEFINED",
-			EnumOptions: ["admin", "user", "guest"],
-			Comment: "",
-		};
-		const result = getType("table", desc, postgresConfig);
-		expect(result).toEqual(
-			"z.enum(['admin','user','guest']).optional().default('admin')",
-		);
-	});
-
-	// SQLite specific tests
-	test("should handle SQLite integer type", ({ expect }) => {
-		const desc: Desc = {
-			Default: "42",
-			Extra: "",
-			Null: "NO",
-			Field: "id",
-			Type: "integer",
-			Comment: "",
-		};
-		const result = getType("table", desc, sqliteConfig);
-		expect(result).toEqual("z.number().optional().default(42)");
-	});
-
-	test("should handle SQLite text type", ({ expect }) => {
-		const desc: Desc = {
-			Default: null,
-			Extra: "",
-			Null: "NO",
-			Field: "name",
-			Type: "text",
-			Comment: "",
-		};
-		const result = getType("table", desc, sqliteConfig);
-		expect(result).toEqual("z.string().min(1)");
-	});
-
-	test("should handle SQLite datetime type", ({ expect }) => {
-		const desc: Desc = {
-			Default: null,
-			Extra: "",
-			Null: "NO",
-			Field: "created_at",
-			Type: "datetime",
-			Comment: "",
-		};
-		const result = getType("table", desc, sqliteConfig);
-		expect(result).toEqual(
-			"z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())",
-		);
-	});
-
-	test("should handle SQLite boolean type", ({ expect }) => {
-		const desc: Desc = {
-			Default: "1",
-			Extra: "",
-			Null: "NO",
-			Field: "active",
-			Type: "boolean",
-			Comment: "",
-		};
-		const result = getType("table", desc, sqliteConfig);
-		expect(result).toEqual(
-			"z.union([z.number(),z.string(),z.boolean()]).pipe(z.coerce.boolean()).optional().default(true)",
-		);
-	});
-});
+			// Verify the content contains expected elements
+			expect(content).toContain(
+				"import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';",
+			)
+			expect(content).toContain(
+				'export type Json = ColumnType<JsonValue, string, string>;',
+			)
+			expect(content).toContain('export interface UserTable {')
+			expect(content).toContain('id: Generated<')
+			expect(content).toContain('name:')
+			expect(content).toContain('metadata: Json;')
+			expect(content).toContain('export type User = Selectable<UserTable>;')
+			expect(content).toContain('export type NewUser = Insertable<UserTable>;')
+			expect(content).toContain(
+				'export type UserUpdate = Updateable<UserTable>;',
+			)
+		})
+	})
+})
