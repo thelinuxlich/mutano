@@ -313,7 +313,7 @@ export const updateable_user = z.object({
 
 export const selectable_user = z.object({
   id: z.number().nonnegative(),
-  name: z.string().min(10).max(255),
+  name: z.string(),
   username: z.string(),
   password: z.string(),
   profile_picture: z.string().nullable(),

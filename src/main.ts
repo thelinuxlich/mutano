@@ -189,6 +189,7 @@ export function getType(
 	const { Default, Extra, Null, Type, Comment, EnumOptions } = desc
 	const isZodDestination = destination.type === 'zod'
 	const isTsDestination = destination.type === 'ts'
+	const isKyselyDestination = destination.type === 'kysely'
 	const isNullish =
 		isZodDestination &&
 		destination.type === 'zod' &&
@@ -216,7 +217,8 @@ export function getType(
 		op !== 'selectable'
 	const type = schemaType === 'mysql' ? Type.split('(')[0].split(' ')[0] : Type
 
-	if (isTsDestination) {
+	// Handle TypeScript and Kysely destinations (both use TypeScript types)
+	if (isTsDestination || isKyselyDestination) {
 		const tsOverrideType = config.magicComments
 			? extractTSExpression(Comment)
 			: null
@@ -228,7 +230,12 @@ export function getType(
 			(op === 'updateable' && !isNull && !hasDefaultValue)
 
 		if (tsOverrideType) {
-			return shouldBeNullable ? `${tsOverrideType} | null` : tsOverrideType
+			// Check if the override type already includes "| null" to avoid duplication
+			return shouldBeNullable
+				? tsOverrideType.includes('| null')
+					? tsOverrideType
+					: `${tsOverrideType} | null`
+				: tsOverrideType
 		}
 		if (dateTypes[schemaType].includes(type)) {
 			return shouldBeNullable ? 'Date | null' : 'Date'
@@ -642,6 +649,10 @@ export async function generate(
 	let prismaTables: (Model | null)[] = []
 	let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null
 	let db: ReturnType<typeof knex> | null = null
+
+	if (config.destinations.length === 0) {
+		throw new Error('Empty destinations object.')
+	}
 
 	const dryRunOutput: Record<string, string> = {}
 

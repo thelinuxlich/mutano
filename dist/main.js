@@ -164,6 +164,7 @@ function getType(op, desc, config, destination, tableName) {
   const { Default, Extra, Null, Type, Comment, EnumOptions } = desc;
   const isZodDestination = destination.type === "zod";
   const isTsDestination = destination.type === "ts";
+  const isKyselyDestination = destination.type === "kysely";
   const isNullish = isZodDestination && destination.type === "zod" && destination.nullish === true;
   const isTrim = isZodDestination && destination.type === "zod" && destination.useTrim === true && op !== "selectable";
   const isUseDateType = isZodDestination && destination.type === "zod" && destination.useDateType === true;
@@ -174,11 +175,11 @@ function getType(op, desc, config, destination, tableName) {
     return;
   const isRequiredString = destination.type === "zod" && destination.requiredString === true && op !== "selectable";
   const type = schemaType === "mysql" ? Type.split("(")[0].split(" ")[0] : Type;
-  if (isTsDestination) {
+  if (isTsDestination || isKyselyDestination) {
     const tsOverrideType = config.magicComments ? extractTSExpression(Comment) : null;
     const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
     if (tsOverrideType) {
-      return shouldBeNullable ? `${tsOverrideType} | null` : tsOverrideType;
+      return shouldBeNullable ? tsOverrideType.includes("| null") ? tsOverrideType : `${tsOverrideType} | null` : tsOverrideType;
     }
     if (dateTypes[schemaType].includes(type)) {
       return shouldBeNullable ? "Date | null" : "Date";
@@ -552,6 +553,9 @@ async function generate(config) {
   let prismaTables = [];
   let schema = null;
   let db = null;
+  if (config.destinations.length === 0) {
+    throw new Error("Empty destinations object.");
+  }
   const dryRunOutput = {};
   if (config.origin.type === "mysql") {
     db = knex({
