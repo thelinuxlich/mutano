@@ -14,11 +14,11 @@ import camelCase from 'camelcase'
 import fs from 'fs-extra'
 import knex from 'knex'
 
-const extractTSExpression = (comment: string) => {
-	const start = comment.indexOf('@ts(')
+export const extractTypeExpression = (comment: string, prefix: string) => {
+	const start = comment.indexOf(prefix)
 	if (start === -1) return null
 
-	const typeLen = 4
+	const typeLen = prefix.length
 	let position = start + typeLen
 
 	let depth = 1
@@ -41,27 +41,13 @@ const extractTSExpression = (comment: string) => {
 
 	return null
 }
-function extractZodExpression(comment: string) {
-	const zodStart = comment.indexOf('@zod(')
-	if (zodStart === -1) return null
 
-	let openParens = 0
-	let position = zodStart + 5 // Skip '@zod('
-
-	while (position < comment.length) {
-		if (comment[position] === '(') {
-			openParens++
-		} else if (comment[position] === ')') {
-			if (openParens === 0) {
-				return comment.substring(zodStart + 5, position)
-			}
-			openParens--
-		}
-		position++
-	}
-
-	return null
-}
+export const extractTSExpression = (comment: string) =>
+	extractTypeExpression(comment, '@ts(')
+export const extractKyselyExpression = (comment: string) =>
+	extractTypeExpression(comment, '@kysely(')
+export const extractZodExpression = (comment: string) =>
+	extractTypeExpression(comment, '@zod(')
 
 const prismaValidTypes = [
 	'BigInt',
@@ -219,6 +205,26 @@ export function getType(
 
 	// Handle TypeScript and Kysely destinations (both use TypeScript types)
 	if (isTsDestination || isKyselyDestination) {
+		// For Kysely, first check for @kysely magic comment
+		if (isKyselyDestination && config.magicComments) {
+			const kyselyOverrideType = extractKyselyExpression(Comment)
+			if (kyselyOverrideType) {
+				const shouldBeNullable =
+					isNull ||
+					(['insertable', 'updateable'].includes(op) &&
+						(hasDefaultValue || isGenerated)) ||
+					(op === 'updateable' && !isNull && !hasDefaultValue)
+
+				// Check if the override type already includes "| null" to avoid duplication
+				return shouldBeNullable
+					? kyselyOverrideType.includes('| null')
+						? kyselyOverrideType
+						: `${kyselyOverrideType} | null`
+					: kyselyOverrideType
+			}
+		}
+
+		// If no Kysely override or not a Kysely destination, check for @ts magic comment
 		const tsOverrideType = config.magicComments
 			? extractTSExpression(Comment)
 			: null
@@ -488,7 +494,39 @@ export interface ${camelCase(table, { pascalCase: true })} {`
 							: desc.Type,
 					)
 
-				if (isJsonField) {
+				// Check for magic comments first
+				const kyselyOverrideType = config.magicComments
+					? extractKyselyExpression(desc.Comment)
+					: null
+
+				if (kyselyOverrideType) {
+					// Use the override type from magic comment
+					kyselyType = kyselyOverrideType
+
+					// Handle nullability for the override type
+					if (isNullable && !kyselyType.includes('| null')) {
+						kyselyType = `${kyselyType} | null`
+					}
+
+					// Handle Generated<> wrapping for the override type
+					if (
+						isAutoIncrement ||
+						isDefaultGenerated ||
+						(hasDefaultValue &&
+							(isEnum ||
+								kyselyType === 'string' ||
+								kyselyType === 'boolean' ||
+								kyselyType === 'number' ||
+								kyselyType === 'Decimal' ||
+								kyselyType.includes('boolean | null') ||
+								kyselyType.includes('string | null') ||
+								kyselyType.includes('number | null') ||
+								kyselyType.includes('Decimal | null')))
+					) {
+						kyselyType = `Generated<${kyselyType}>`
+					}
+				} else if (isJsonField) {
+					// Default JSON handling if no override
 					kyselyType = 'Json'
 				} else {
 					// First, handle nullability

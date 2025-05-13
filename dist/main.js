@@ -7,10 +7,10 @@ import {
 import camelCase from "camelcase";
 import fs from "fs-extra";
 import knex from "knex";
-const extractTSExpression = (comment) => {
-  const start = comment.indexOf("@ts(");
+const extractTypeExpression = (comment, prefix) => {
+  const start = comment.indexOf(prefix);
   if (start === -1) return null;
-  const typeLen = 4;
+  const typeLen = prefix.length;
   let position = start + typeLen;
   let depth = 1;
   while (position < comment.length && depth > 0) {
@@ -28,24 +28,9 @@ const extractTSExpression = (comment) => {
   }
   return null;
 };
-function extractZodExpression(comment) {
-  const zodStart = comment.indexOf("@zod(");
-  if (zodStart === -1) return null;
-  let openParens = 0;
-  let position = zodStart + 5;
-  while (position < comment.length) {
-    if (comment[position] === "(") {
-      openParens++;
-    } else if (comment[position] === ")") {
-      if (openParens === 0) {
-        return comment.substring(zodStart + 5, position);
-      }
-      openParens--;
-    }
-    position++;
-  }
-  return null;
-}
+const extractTSExpression = (comment) => extractTypeExpression(comment, "@ts(");
+const extractKyselyExpression = (comment) => extractTypeExpression(comment, "@kysely(");
+const extractZodExpression = (comment) => extractTypeExpression(comment, "@zod(");
 const prismaValidTypes = [
   "BigInt",
   "Boolean",
@@ -175,6 +160,13 @@ function getType(op, desc, config, destination, tableName) {
   const isRequiredString = destination.type === "zod" && destination.requiredString === true && op !== "selectable";
   const type = schemaType === "mysql" ? Type.split("(")[0].split(" ")[0] : Type;
   if (isTsDestination || isKyselyDestination) {
+    if (isKyselyDestination && config.magicComments) {
+      const kyselyOverrideType = extractKyselyExpression(Comment);
+      if (kyselyOverrideType) {
+        const shouldBeNullable2 = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
+        return shouldBeNullable2 ? kyselyOverrideType.includes("| null") ? kyselyOverrideType : `${kyselyOverrideType} | null` : kyselyOverrideType;
+      }
+    }
     const tsOverrideType = config.magicComments ? extractTSExpression(Comment) : null;
     const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
     if (tsOverrideType) {
@@ -374,7 +366,16 @@ export interface ${camelCase(table, { pascalCase: true })} {`;
         const isEnum = schemaType !== "sqlite" && enumTypes[schemaType].includes(
           schemaType === "mysql" ? desc.Type.split("(")[0].split(" ")[0] : desc.Type
         );
-        if (isJsonField) {
+        const kyselyOverrideType = config.magicComments ? extractKyselyExpression(desc.Comment) : null;
+        if (kyselyOverrideType) {
+          kyselyType = kyselyOverrideType;
+          if (isNullable && !kyselyType.includes("| null")) {
+            kyselyType = `${kyselyType} | null`;
+          }
+          if (isAutoIncrement || isDefaultGenerated || hasDefaultValue && (isEnum || kyselyType === "string" || kyselyType === "boolean" || kyselyType === "number" || kyselyType === "Decimal" || kyselyType.includes("boolean | null") || kyselyType.includes("string | null") || kyselyType.includes("number | null") || kyselyType.includes("Decimal | null"))) {
+            kyselyType = `Generated<${kyselyType}>`;
+          }
+        } else if (isJsonField) {
           kyselyType = "Json";
         } else {
           if (isNullable && !isJsonField) {
@@ -908,6 +909,10 @@ export interface ${schemaName} {
 export {
   defaultKyselyHeader,
   defaultZodHeader,
+  extractKyselyExpression,
+  extractTSExpression,
+  extractTypeExpression,
+  extractZodExpression,
   generate,
   generateContent,
   getType

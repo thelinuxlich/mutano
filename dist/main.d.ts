@@ -1,3 +1,7 @@
+export declare const extractTypeExpression: (comment: string, prefix: string) => string;
+export declare const extractTSExpression: (comment: string) => string;
+export declare const extractKyselyExpression: (comment: string) => string;
+export declare const extractZodExpression: (comment: string) => string;
 export declare function getType(op: 'table' | 'insertable' | 'updateable' | 'selectable', desc: Desc, config: Config, destination: Destination, tableName?: string): string;
 export interface GenerateContentParams {
     table: string;

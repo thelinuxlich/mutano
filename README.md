@@ -30,7 +30,7 @@ CREATE TABLE `user` (
   `username` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
   `profile_picture` varchar(255) DEFAULT NULL,
-  `metadata` json NOT NULL COMMENT '@ts(Record<string, unknown>)', -- this will override the TypeScript type
+  `metadata` json NOT NULL COMMENT '@ts(Record<string, unknown>) @kysely(Record<string, string>)', -- this will override the TypeScript and Kysely type
   `role` enum('admin','user') NOT NULL,
   PRIMARY KEY (`id`)
 );
@@ -184,7 +184,7 @@ const output = await generate({
   destinations: [{
     type: 'zod'
   }],
-  dryRun: true // Return content instead of writing to files
+  dryRun: true // Return content and don't write to files
 })
 
 // Output is an object where keys are filenames and values are file content
@@ -400,7 +400,7 @@ export interface UserTable {
   username: string;
   password: string;
   profile_picture: string | null;
-  metadata: Json;
+  metadata: Record<string, unknown>; // Custom type from @kysely comment
   role: 'admin' | 'user';
 }
 
@@ -486,8 +486,7 @@ export type UserUpdate = Updateable<UserTable>;
       "type": "kysely",
       "schemaName": "Database",
       "header": "import { Generated, ColumnType } from 'kysely';\nimport { CustomTypes } from './types';",
-      "folder": "kysely",
-      "suffix": "db"
+      "outFile": "db.ts"
     }
   ],
   "tables": ["user", "log"],
@@ -513,6 +512,7 @@ export type UserUpdate = Updateable<UserTable>;
 | destinations[].header | Custom header to include at the beginning of generated files (e.g., custom imports) |
 | destinations[].folder | Specify the output directory for the generated files |
 | destinations[].suffix | Suffix to the name of a generated file (eg: `user.table.ts`) |
+| destinations[].outFile | (Kysely only) Specify the output file for the generated content. All tables will be written to this file |
 | tables | Filter the tables to include only those specified |
 | ignore | Filter the tables to exclude those specified. If a table name begins and ends with "/", it will be processed as a regular expression |
 | camelCase | Convert all table names and their properties to camelcase. (eg: `profile_picture` becomes `profilePicture`) |
@@ -641,7 +641,30 @@ export interface User {
 }
 ```
 
-You can use complex TypeScript types in the `@ts` comment:
+### @kysely Comments
+
+You can use the `@kysely` comment to override the Kysely type for a specific column. This is useful when you want to specify a more precise type for a field.
+
+```sql
+CREATE TABLE `user` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `metadata` json NOT NULL COMMENT '@kysely(Record<string, string>)',
+  PRIMARY KEY (`id`)
+);
+```
+
+This will generate:
+
+```typescript
+export interface UserTable {
+  id: Generated<number>;
+  metadata: Record<string, string>;
+}
+```
+
+## Complex TypeScript Types
+
+You can use complex TypeScript types in the `@ts`(or `@kysely`) comment:
 
 ```sql
 CREATE TABLE `product` (
