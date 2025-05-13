@@ -396,7 +396,7 @@ export interface ${camelCase(table, { pascalCase: true })} {`;
             kyselyType = `Generated<${kyselyType}>`;
           }
         } else if (isJsonField) {
-          kyselyType = "Json";
+          kyselyType = isNullable ? "Json | null" : "Json";
         } else {
           if (isNullable && !isJsonField) {
             if (!kyselyType.includes("| null")) {

@@ -563,7 +563,7 @@ export interface ${camelCase(table, { pascalCase: true })} {`
           }
         } else if (isJsonField) {
           // Default JSON handling if no override
-          kyselyType = 'Json'
+          kyselyType = isNullable ? 'Json | null' : 'Json'
         } else {
           // First, handle nullability
           if (isNullable && !isJsonField) {

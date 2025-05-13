@@ -296,7 +296,7 @@ describe('mutano', () => {
 			expect(content).toContain('export interface User {')
 			expect(content).toContain('id: Generated<')
 			expect(content).toContain('name:')
-			expect(content).toContain('metadata: Json;')
+			expect(content).toContain('metadata: Json | null;')
 			expect(content).toContain(
 				'export type SelectableUser = Selectable<User>;',
 			)
