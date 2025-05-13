@@ -77,7 +77,6 @@ const stringTypes = {
     "mediumtext",
     "longtext",
     "json",
-    "decimal",
     "time",
     "year",
     "char",
@@ -96,9 +95,7 @@ const stringTypes = {
     "timetz",
     "interval",
     "name",
-    "citext",
-    "numeric",
-    "decimal"
+    "citext"
   ],
   sqlite: [
     "text",
@@ -111,7 +108,7 @@ const stringTypes = {
     "clob",
     "json"
   ],
-  prisma: ["String", "Decimal", "BigInt", "Bytes", "Json"]
+  prisma: ["String", "BigInt", "Bytes", "Json"]
 };
 const numberTypes = {
   mysql: ["smallint", "mediumint", "int", "bigint", "float", "double"],
@@ -119,8 +116,6 @@ const numberTypes = {
     "smallint",
     "integer",
     "bigint",
-    "decimal",
-    "numeric",
     "real",
     "double precision",
     "serial",
@@ -139,11 +134,15 @@ const numberTypes = {
     "real",
     "double",
     "double precision",
-    "float",
-    "numeric",
-    "decimal"
+    "float"
   ],
   prisma: ["Int", "Float"]
+};
+const decimalTypes = {
+  mysql: ["decimal"],
+  postgres: ["decimal", "numeric"],
+  sqlite: ["numeric", "decimal"],
+  prisma: ["Decimal"]
 };
 const booleanTypes = {
   mysql: ["tinyint"],
@@ -192,6 +191,12 @@ function getType(op, desc, config, destination, tableName) {
     }
     if (booleanTypes[schemaType].includes(type)) {
       return shouldBeNullable ? "boolean | null" : "boolean";
+    }
+    if (decimalTypes[schemaType].includes(type) || type === "Decimal") {
+      if (isKyselyDestination) {
+        return shouldBeNullable ? "Decimal | null" : "Decimal";
+      }
+      return shouldBeNullable ? "string | null" : "string";
     }
     if (schemaType !== "sqlite" && enumTypes[schemaType].includes(type)) {
       const enumType = destination.type === "ts" ? destination.enumType || "union" : "union";
@@ -324,6 +329,16 @@ function getType(op, desc, config, destination, tableName) {
   if (dateTypes[schemaType].includes(type)) return generateDateLikeField();
   if (stringTypes[schemaType].includes(type)) return generateStringLikeField();
   if (numberTypes[schemaType].includes(type)) return generateNumberLikeField();
+  if (decimalTypes[schemaType].includes(type) || type === "Decimal") {
+    if (isKyselyDestination) {
+      const isNull2 = Null === "YES";
+      const hasDefaultValue2 = Default !== null;
+      const isGenerated2 = Extra.toLowerCase().includes("auto_increment") || Extra.toLowerCase().includes("default_generated");
+      const shouldBeNullable = isNull2 || ["insertable", "updateable"].includes(op) && (hasDefaultValue2 || isGenerated2) || op === "updateable" && !isNull2 && !hasDefaultValue2;
+      return shouldBeNullable ? "Decimal | null" : "Decimal";
+    }
+    return generateStringLikeField();
+  }
   if (booleanTypes[schemaType].includes(type)) return generateBooleanLikeField();
   if (schemaType !== "sqlite" && enumTypes[schemaType].includes(type))
     return generateEnumLikeField();
@@ -361,12 +376,14 @@ export interface ${camelCase(table, { pascalCase: true })} {`;
         );
         if (isJsonField) {
           kyselyType = "Json";
-        } else if (isAutoIncrement || isDefaultGenerated || isEnum && hasDefaultValue) {
-          kyselyType = `Generated<${kyselyType}>`;
-        }
-        if (isNullable && !isJsonField) {
-          if (!kyselyType.includes("| null")) {
-            kyselyType = `${kyselyType} | null`;
+        } else {
+          if (isNullable && !isJsonField) {
+            if (!kyselyType.includes("| null")) {
+              kyselyType = `${kyselyType} | null`;
+            }
+          }
+          if (isAutoIncrement || isDefaultGenerated || hasDefaultValue && (isEnum || kyselyType === "string" || kyselyType === "boolean" || kyselyType === "number" || kyselyType === "Decimal" || kyselyType.includes("boolean | null") || kyselyType.includes("string | null") || kyselyType.includes("number | null") || kyselyType.includes("Decimal | null"))) {
+            kyselyType = `Generated<${kyselyType}>`;
           }
         }
         content = `${content}
@@ -834,6 +851,8 @@ export type JsonObject = {
 export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
+export type Decimal = ColumnType<string, number | string>
 
 `;
     consolidatedContent += "// Table Interfaces\n";
