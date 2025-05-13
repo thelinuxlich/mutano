@@ -93,14 +93,19 @@ const stringTypes = {
     "clob",
     "json"
   ],
-  prisma: ["String", "BigInt", "Bytes", "Json"]
+  prisma: ["String", "Bytes", "Json"]
+};
+const bigIntTypes = {
+  mysql: ["bigint"],
+  postgres: ["bigint"],
+  sqlite: ["bigint"],
+  prisma: ["BigInt"]
 };
 const numberTypes = {
-  mysql: ["smallint", "mediumint", "int", "bigint", "float", "double"],
+  mysql: ["smallint", "mediumint", "int", "float", "double"],
   postgres: [
     "smallint",
     "integer",
-    "bigint",
     "real",
     "double precision",
     "serial",
@@ -112,7 +117,6 @@ const numberTypes = {
     "tinyint",
     "smallint",
     "mediumint",
-    "bigint",
     "unsigned big int",
     "int2",
     "int8",
@@ -183,6 +187,12 @@ function getType(op, desc, config, destination, tableName) {
     }
     if (booleanTypes[schemaType].includes(type)) {
       return shouldBeNullable ? "boolean | null" : "boolean";
+    }
+    if (bigIntTypes[schemaType].includes(type) || type === "BigInt") {
+      if (isKyselyDestination) {
+        return shouldBeNullable ? "BigInt | null" : "BigInt";
+      }
+      return shouldBeNullable ? "string | null" : "string";
     }
     if (decimalTypes[schemaType].includes(type) || type === "Decimal") {
       if (isKyselyDestination) {
@@ -321,6 +331,16 @@ function getType(op, desc, config, destination, tableName) {
   if (dateTypes[schemaType].includes(type)) return generateDateLikeField();
   if (stringTypes[schemaType].includes(type)) return generateStringLikeField();
   if (numberTypes[schemaType].includes(type)) return generateNumberLikeField();
+  if (bigIntTypes[schemaType].includes(type) || type === "BigInt") {
+    if (isKyselyDestination) {
+      const isNull2 = Null === "YES";
+      const hasDefaultValue2 = Default !== null;
+      const isGenerated2 = Extra.toLowerCase().includes("auto_increment") || Extra.toLowerCase().includes("default_generated");
+      const shouldBeNullable = isNull2 || ["insertable", "updateable"].includes(op) && (hasDefaultValue2 || isGenerated2) || op === "updateable" && !isNull2 && !hasDefaultValue2;
+      return shouldBeNullable ? "BigInt | null" : "BigInt";
+    }
+    return generateStringLikeField();
+  }
   if (decimalTypes[schemaType].includes(type) || type === "Decimal") {
     if (isKyselyDestination) {
       const isNull2 = Null === "YES";
@@ -372,7 +392,7 @@ export interface ${camelCase(table, { pascalCase: true })} {`;
           if (isNullable && !kyselyType.includes("| null")) {
             kyselyType = `${kyselyType} | null`;
           }
-          if (isAutoIncrement || isDefaultGenerated || hasDefaultValue && (isEnum || kyselyType === "string" || kyselyType === "boolean" || kyselyType === "number" || kyselyType === "Decimal" || kyselyType.includes("boolean | null") || kyselyType.includes("string | null") || kyselyType.includes("number | null") || kyselyType.includes("Decimal | null"))) {
+          if (isAutoIncrement || isDefaultGenerated || hasDefaultValue && (isEnum || kyselyType === "string" || kyselyType === "boolean" || kyselyType === "number" || kyselyType === "Decimal" || kyselyType === "BigInt" || kyselyType.includes("boolean | null") || kyselyType.includes("string | null") || kyselyType.includes("number | null") || kyselyType.includes("Decimal | null") || kyselyType.includes("BigInt | null"))) {
             kyselyType = `Generated<${kyselyType}>`;
           }
         } else if (isJsonField) {
@@ -383,7 +403,7 @@ export interface ${camelCase(table, { pascalCase: true })} {`;
               kyselyType = `${kyselyType} | null`;
             }
           }
-          if (isAutoIncrement || isDefaultGenerated || hasDefaultValue && (isEnum || kyselyType === "string" || kyselyType === "boolean" || kyselyType === "number" || kyselyType === "Decimal" || kyselyType.includes("boolean | null") || kyselyType.includes("string | null") || kyselyType.includes("number | null") || kyselyType.includes("Decimal | null"))) {
+          if (isAutoIncrement || isDefaultGenerated || hasDefaultValue && (isEnum || kyselyType === "string" || kyselyType === "boolean" || kyselyType === "number" || kyselyType === "Decimal" || kyselyType === "BigInt" || kyselyType.includes("boolean | null") || kyselyType.includes("string | null") || kyselyType.includes("number | null") || kyselyType.includes("Decimal | null") || kyselyType.includes("BigInt | null"))) {
             kyselyType = `Generated<${kyselyType}>`;
           }
         }
@@ -855,6 +875,7 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Decimal = ColumnType<string, number | string>
 
+export type BigInt = ColumnType<string, number | string>
 `;
     consolidatedContent += "// Table Interfaces\n";
     for (const { content } of tableContents) {
