@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type Desc, extractTypeExpression, getType } from './main.js'
+import { type Desc, extractTypeExpression, getType } from '../main.js'
 
 describe('Kysely magic comments', () => {
 	test('should use @kysely magic comment for Kysely type', () => {
@@ -191,27 +191,19 @@ describe('Kysely magic comments', () => {
 			magicComments: true,
 		}
 
-		// First, get the type from getType
 		const type = getType('table', desc, config, config.destinations[0])
-
-		// Then, simulate what happens in generateContent with our fix
 		const isJsonField = desc.Type.toLowerCase().includes('json')
 		let kyselyType = type
 
-		// Check for magic comments first
 		const kyselyOverrideType = config.magicComments
 			? extractTypeExpression(desc.Comment, '@kysely(')
 			: null
 
 		if (kyselyOverrideType) {
-			// Use the override type from magic comment
 			kyselyType = kyselyOverrideType
 		} else if (isJsonField) {
-			// Default JSON handling if no override
 			kyselyType = 'Json'
 		}
-
-		// This should now be 'CustomJsonType'
 		expect(kyselyType).toBe('CustomJsonType')
 	})
 })

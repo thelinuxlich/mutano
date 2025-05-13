@@ -4,7 +4,9 @@
     "module": "ESNext",
     "moduleResolution": "Node",
     "target": "ESNext",
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "esModuleInterop": true
   }
 }

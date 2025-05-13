@@ -9,7 +9,7 @@ import {
 	generate,
 	generateContent,
 	getType,
-} from './main.js'
+} from '../main.js'
 
 describe('mutano with SQLite', () => {
 	const dbPath = './test.db'
@@ -56,12 +56,8 @@ describe('mutano with SQLite', () => {
 		dryRun: false,
 	}
 
-	// Setup test database
 	beforeAll(async () => {
-		// Create test directory
 		fs.ensureDirSync(outputDir)
-
-		// Create SQLite database
 		db = knex({
 			client: 'sqlite3',
 			connection: {
@@ -70,35 +66,33 @@ describe('mutano with SQLite', () => {
 			useNullAsDefault: true,
 		})
 
-		// Create test tables with SQLite-specific types
 		await db.schema.createTable('users', (table) => {
-			table.increments('id').primary() // SQLite integer primary key
+			table.increments('id').primary()
 			table
 				.text('name')
 				.notNullable()
-				.comment('@zod(z.string().min(3).max(50))') // TEXT type
-			table.text('email').notNullable().unique().comment('@ts(Email)') // TEXT type
-			table.text('password').notNullable() // TEXT type
-			table.text('profile_picture').nullable() // TEXT type that can be null
-			table.text('bio').nullable() // TEXT type with potentially longer content
-			table.integer('age').nullable() // INTEGER type
-			table.float('score').defaultTo(0) // REAL type (floating point)
-			table.boolean('is_active').defaultTo(true) // INTEGER 0/1 internally
-			table.datetime('created_at').defaultTo(db.fn.now()) // TEXT in ISO format internally
-			table.datetime('updated_at').nullable() // TEXT in ISO format that can be null
+				.comment('@zod(z.string().min(3).max(50))')
+			table.text('email').notNullable().unique().comment('@ts(Email)')
+			table.text('password').notNullable()
+			table.text('profile_picture').nullable()
+			table.text('bio').nullable()
+			table.integer('age').nullable()
+			table.float('score').defaultTo(0)
+			table.boolean('is_active').defaultTo(true)
+			table.datetime('created_at').defaultTo(db.fn.now())
+			table.datetime('updated_at').nullable()
 		})
 
 		await db.schema.createTable('posts', (table) => {
-			table.increments('id').primary() // SQLite integer primary key
-			table.integer('user_id').notNullable() // INTEGER type
-			table.text('title').notNullable() // TEXT type
-			table.text('content').nullable() // TEXT type for longer content
-			table.text('status').defaultTo('draft') // TEXT type with default
-			table.datetime('published_at').nullable() // TEXT in ISO format that can be null
-			table.datetime('created_at').defaultTo(db.fn.now()) // TEXT in ISO format
+			table.increments('id').primary()
+			table.integer('user_id').notNullable()
+			table.text('title').notNullable()
+			table.text('content').nullable()
+			table.text('status').defaultTo('draft')
+			table.datetime('published_at').nullable()
+			table.datetime('created_at').defaultTo(db.fn.now())
 		})
 
-		// Insert some test data
 		await db('users').insert([
 			{
 				name: 'John Doe',
@@ -142,7 +136,6 @@ describe('mutano with SQLite', () => {
 		])
 	})
 
-	// Clean up after tests
 	afterAll(async () => {
 		await db.destroy()
 		fs.removeSync(dbPath)
@@ -152,17 +145,15 @@ describe('mutano with SQLite', () => {
 	test('should generate all destination types from SQLite database', async () => {
 		const result = await generate(sqliteConfig)
 
-		// Check if files were created
 		expect(typeof result).toBe('object')
 		expect(Object.keys(result).length).toBeGreaterThan(0)
 
-		// Check for specific files - now using absolute paths
 		const fileNames = Object.keys(result).map((file) => path.basename(file))
 		expect(fileNames).toContain('users.schema.ts')
 		expect(fileNames).toContain('users.type.ts')
 		expect(fileNames).toContain('posts.schema.ts')
 		expect(fileNames).toContain('posts.type.ts')
-		expect(fileNames).toContain('db.ts') // Consolidated Kysely file
+		expect(fileNames).toContain('db.ts')
 	})
 
 	test('should generate with dryRun option', async () => {
@@ -172,12 +163,9 @@ describe('mutano with SQLite', () => {
 		}
 
 		const result = await generate(dryRunConfig)
-
-		// Check if content was returned
 		expect(typeof result).toBe('object')
 		expect(Object.keys(result).length).toBeGreaterThan(0)
 
-		// Get the file contents by basename
 		const fileContents: Record<string, string> = {}
 		for (const [filePath, content] of Object.entries(result)) {
 			fileContents[path.basename(filePath)] = content
@@ -185,12 +173,10 @@ describe('mutano with SQLite', () => {
 
 		expect(fileContents['users.schema.ts']).toBeDefined()
 		expect(fileContents['users.type.ts']).toBeDefined()
-		expect(fileContents['db.ts']).toBeDefined() // Consolidated Kysely file
+		expect(fileContents['db.ts']).toBeDefined()
 	})
 
 	test('should handle SQLite type mapping correctly', () => {
-		// In SQLite, we need to focus on the actual types that SQLite supports
-		// SQLite has dynamic typing with storage classes: NULL, INTEGER, REAL, TEXT, and BLOB
 		const testCases: {
 			desc: Desc
 			expectedContains: string
@@ -273,7 +259,6 @@ describe('mutano with SQLite', () => {
 	})
 
 	test('should respect camelCase option', async () => {
-		// Create a temporary config with camelCase enabled
 		const camelCaseConfig: Config = {
 			...sqliteConfig,
 			camelCase: true,
@@ -281,26 +266,17 @@ describe('mutano with SQLite', () => {
 		}
 
 		const result = await generate(camelCaseConfig)
-
-		// Check if camelCase was applied
-		// Get the file contents by basename
 		const fileContents: Record<string, string> = {}
 		for (const [filePath, content] of Object.entries(result)) {
 			fileContents[path.basename(filePath)] = content
 		}
 
-		// Check Zod output
 		expect(fileContents['users.schema.ts']).toContain('profilePicture:')
-
-		// Check TypeScript output
 		expect(fileContents['users.type.ts']).toContain('profilePicture:')
-
-		// Check Kysely output
 		expect(fileContents['db.ts']).toContain('profilePicture:')
 	})
 
 	test('should respect custom headers', async () => {
-		// Create a temporary config with custom headers
 		const customHeaderConfig: Config = {
 			...sqliteConfig,
 			destinations: [
@@ -329,32 +305,23 @@ describe('mutano with SQLite', () => {
 		}
 
 		const result = await generate(customHeaderConfig)
-
-		// Check if custom headers were applied
-		// Get the file contents by basename
 		const fileContents: Record<string, string> = {}
 		for (const [filePath, content] of Object.entries(result)) {
 			fileContents[path.basename(filePath)] = content
 		}
 
-		// Check Zod output
 		expect(fileContents['users.schema.ts']).toContain(
 			"import { customValidator } from './validators';",
 		)
-
-		// Check TypeScript output
 		expect(fileContents['users.type.ts']).toContain(
 			"import type { Email } from './types';",
 		)
-
-		// Check Kysely output
 		expect(fileContents['db.ts']).toContain(
 			"import { CustomTypes } from './types';",
 		)
 	})
 
 	test('should respect type overrides from config', async () => {
-		// Create a temporary config with type overrides
 		const overrideConfig: Config = {
 			origin: {
 				type: 'sqlite',
@@ -373,22 +340,16 @@ describe('mutano with SQLite', () => {
 
 		const result = await generate(overrideConfig)
 
-		// Check if type overrides were applied
-		// Get the file contents by basename
 		const fileContents: Record<string, string> = {}
 		for (const [filePath, content] of Object.entries(result)) {
 			fileContents[path.basename(filePath)] = content
 		}
 
-		// Check for the overridden text type
 		expect(fileContents['posts.schema.ts']).toContain('z.string().max(1000)')
-
-		// Check for the overridden integer type
 		expect(fileContents['users.schema.ts']).toContain('z.number().positive()')
 	})
 
 	test('should generate content for all destination types', () => {
-		// Use only SQLite-compatible types
 		const describes: Desc[] = [
 			{
 				Field: 'id',
@@ -432,7 +393,6 @@ describe('mutano with SQLite', () => {
 			},
 		]
 
-		// Test Zod content generation
 		const zodContent = generateContent({
 			table: 'test_table',
 			describes,
@@ -460,7 +420,6 @@ describe('mutano with SQLite', () => {
 			'export const selectable_test_table = z.object({',
 		)
 
-		// Test TypeScript content generation
 		const tsContent = generateContent({
 			table: 'test_table',
 			describes,

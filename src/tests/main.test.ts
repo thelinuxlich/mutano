@@ -5,7 +5,7 @@ import {
 	defaultZodHeader,
 	generateContent,
 	getType,
-} from './main.js'
+} from '../main.js'
 
 describe('mutano', () => {
 	const mysqlConfig: Config = {

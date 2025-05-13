@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type Desc, getType } from './main'
+import { type Desc, getType } from '../main.js'
 
 describe('Prisma type handling', () => {
 	test('should convert Prisma Decimal type to Kysely Decimal type', () => {
@@ -76,10 +76,7 @@ describe('Prisma type handling', () => {
 			],
 		}
 
-		// First get the type
 		const type = getType('table', desc, config, config.destinations[0])
-
-		// Then simulate the wrapping with Generated<> that happens in generateContent
 		let kyselyType = type
 		const hasDefaultValue = desc.Default !== null
 
