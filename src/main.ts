@@ -759,7 +759,7 @@ export type Selectable${camelCase(`${table}Type`, {
 }
 
 export const defaultKyselyHeader =
-  "import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n"
+  "import { ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n"
 
 export const defaultZodHeader = "import { z } from 'zod';\n\n"
 
@@ -1133,6 +1133,10 @@ export type JsonObject = {
 export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>
 
 export type Decimal = ColumnType<string, number | string, number | string>
 

@@ -13,7 +13,7 @@ export interface GenerateContentParams {
     defaultZodHeader: string;
 }
 export declare function generateContent({ table, describes, config, destination, isCamelCase, enumDeclarations, defaultZodHeader, }: GenerateContentParams): string;
-export declare const defaultKyselyHeader = "import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n";
+export declare const defaultKyselyHeader = "import { ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n";
 export declare const defaultZodHeader = "import { z } from 'zod';\n\n";
 export declare function generate(config: Config): Promise<Record<string, string>>;
 type MySQLValidTypes = 'date' | 'datetime' | 'timestamp' | 'time' | 'year' | 'char' | 'varchar' | 'tinytext' | 'text' | 'mediumtext' | 'longtext' | 'json' | 'decimal' | 'tinyint' | 'smallint' | 'mediumint' | 'int' | 'bigint' | 'float' | 'double' | 'enum';
