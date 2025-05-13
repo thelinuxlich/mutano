@@ -112,14 +112,20 @@ const stringTypes = {
 		'clob',
 		'json',
 	],
-	prisma: ['String', 'BigInt', 'Bytes', 'Json'],
+	prisma: ['String', 'Bytes', 'Json'],
+}
+
+const bigIntTypes = {
+	mysql: ['bigint'],
+	postgres: ['bigint'],
+	sqlite: ['bigint'],
+	prisma: ['BigInt'],
 }
 const numberTypes = {
-	mysql: ['smallint', 'mediumint', 'int', 'bigint', 'float', 'double'],
+	mysql: ['smallint', 'mediumint', 'int', 'float', 'double'],
 	postgres: [
 		'smallint',
 		'integer',
-		'bigint',
 		'real',
 		'double precision',
 		'serial',
@@ -131,7 +137,6 @@ const numberTypes = {
 		'tinyint',
 		'smallint',
 		'mediumint',
-		'bigint',
 		'unsigned big int',
 		'int2',
 		'int8',
@@ -257,6 +262,15 @@ export function getType(
 
 		if (booleanTypes[schemaType].includes(type)) {
 			return shouldBeNullable ? 'boolean | null' : 'boolean'
+		}
+
+		if (bigIntTypes[schemaType].includes(type) || type === 'BigInt') {
+			// For Kysely, use BigInt type
+			if (isKyselyDestination) {
+				return shouldBeNullable ? 'BigInt | null' : 'BigInt'
+			}
+			// For TypeScript, use string type
+			return shouldBeNullable ? 'string | null' : 'string'
 		}
 
 		if (decimalTypes[schemaType].includes(type) || type === 'Decimal') {
@@ -420,6 +434,26 @@ export function getType(
 	if (dateTypes[schemaType].includes(type)) return generateDateLikeField()
 	if (stringTypes[schemaType].includes(type)) return generateStringLikeField()
 	if (numberTypes[schemaType].includes(type)) return generateNumberLikeField()
+	if (bigIntTypes[schemaType].includes(type) || type === 'BigInt') {
+		// For Kysely, use the BigInt type
+		if (isKyselyDestination) {
+			const isNull = Null === 'YES'
+			const hasDefaultValue = Default !== null
+			const isGenerated =
+				Extra.toLowerCase().includes('auto_increment') ||
+				Extra.toLowerCase().includes('default_generated')
+
+			const shouldBeNullable =
+				isNull ||
+				(['insertable', 'updateable'].includes(op) &&
+					(hasDefaultValue || isGenerated)) ||
+				(op === 'updateable' && !isNull && !hasDefaultValue)
+
+			return shouldBeNullable ? 'BigInt | null' : 'BigInt'
+		}
+		// For other destinations, treat as string
+		return generateStringLikeField()
+	}
 	if (decimalTypes[schemaType].includes(type) || type === 'Decimal') {
 		// For Kysely, use the Decimal type
 		if (isKyselyDestination) {
@@ -518,10 +552,12 @@ export interface ${camelCase(table, { pascalCase: true })} {`
 								kyselyType === 'boolean' ||
 								kyselyType === 'number' ||
 								kyselyType === 'Decimal' ||
+								kyselyType === 'BigInt' ||
 								kyselyType.includes('boolean | null') ||
 								kyselyType.includes('string | null') ||
 								kyselyType.includes('number | null') ||
-								kyselyType.includes('Decimal | null')))
+								kyselyType.includes('Decimal | null') ||
+								kyselyType.includes('BigInt | null')))
 					) {
 						kyselyType = `Generated<${kyselyType}>`
 					}
@@ -547,10 +583,12 @@ export interface ${camelCase(table, { pascalCase: true })} {`
 								kyselyType === 'boolean' ||
 								kyselyType === 'number' ||
 								kyselyType === 'Decimal' ||
+								kyselyType === 'BigInt' ||
 								kyselyType.includes('boolean | null') ||
 								kyselyType.includes('string | null') ||
 								kyselyType.includes('number | null') ||
-								kyselyType.includes('Decimal | null')))
+								kyselyType.includes('Decimal | null') ||
+								kyselyType.includes('BigInt | null')))
 					) {
 						kyselyType = `Generated<${kyselyType}>`
 					}
@@ -1098,6 +1136,7 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Decimal = ColumnType<string, number | string>
 
+export type BigInt = ColumnType<string, number | string>
 `
 
 		consolidatedContent += '// Table Interfaces\n'

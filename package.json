@@ -1,7 +1,7 @@
 {
 	"name": "mutano",
 	"type": "module",
-	"version": "2.5.0",
+	"version": "2.6.0",
 	"description": "Converts Prisma/MySQL/PostgreSQL/SQLite schemas to Zod/TS/Kysely interfaces",
 	"author": "Alisson Cavalcante Agiani <thelinuxlich@gmail.com>",
 	"license": "MIT",
