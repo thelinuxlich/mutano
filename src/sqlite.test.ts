@@ -5,7 +5,6 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import {
 	type Config,
 	type Desc,
-	defaultKyselyHeader,
 	defaultZodHeader,
 	generate,
 	generateContent,
@@ -49,8 +48,7 @@ describe('mutano with SQLite', () => {
 			{
 				type: 'kysely',
 				schemaName: 'TestDB',
-				folder: path.join(outputDir, 'kysely'),
-				suffix: 'db',
+				outFile: path.join(outputDir, 'kysely', 'db.ts'),
 			},
 		],
 		camelCase: true,
@@ -163,10 +161,9 @@ describe('mutano with SQLite', () => {
 			const fileNames = result.map((file) => path.basename(file))
 			expect(fileNames).toContain('users.schema.ts')
 			expect(fileNames).toContain('users.type.ts')
-			expect(fileNames).toContain('users.db.ts')
 			expect(fileNames).toContain('posts.schema.ts')
 			expect(fileNames).toContain('posts.type.ts')
-			expect(fileNames).toContain('posts.db.ts')
+			expect(fileNames).toContain('db.ts') // Consolidated Kysely file
 		}
 	})
 
@@ -184,7 +181,7 @@ describe('mutano with SQLite', () => {
 			expect(Object.keys(result).length).toBeGreaterThan(0)
 			expect(result['users.schema.ts']).toBeDefined()
 			expect(result['users.type.ts']).toBeDefined()
-			expect(result['users.db.ts']).toBeDefined()
+			expect(result['db.ts']).toBeDefined() // Consolidated Kysely file
 		}
 	})
 
@@ -291,7 +288,7 @@ describe('mutano with SQLite', () => {
 			expect(result['users.type.ts']).toContain('profilePicture:')
 
 			// Check Kysely output
-			expect(result['users.db.ts']).toContain('profilePicture:')
+			expect(result['db.ts']).toContain('profilePicture:')
 		}
 	})
 
@@ -318,8 +315,7 @@ describe('mutano with SQLite', () => {
 					type: 'kysely',
 					header:
 						"import { Generated, ColumnType } from 'kysely';\nimport { CustomTypes } from './types';",
-					folder: path.join(outputDir, 'custom-header'),
-					suffix: 'db',
+					outFile: path.join(outputDir, 'custom-header', 'db.ts'),
 				},
 			],
 			dryRun: true,
@@ -340,7 +336,7 @@ describe('mutano with SQLite', () => {
 			)
 
 			// Check Kysely output
-			expect(result['users.db.ts']).toContain(
+			expect(result['db.ts']).toContain(
 				"import { CustomTypes } from './types';",
 			)
 		}
@@ -430,7 +426,6 @@ describe('mutano with SQLite', () => {
 			isCamelCase: true,
 			enumDeclarations: {},
 			defaultZodHeader,
-			defaultKyselyHeader,
 		})
 
 		expect(zodContent).toContain("import { z } from 'zod';")
@@ -459,7 +454,6 @@ describe('mutano with SQLite', () => {
 			isCamelCase: true,
 			enumDeclarations: {},
 			defaultZodHeader,
-			defaultKyselyHeader,
 		})
 
 		expect(tsContent).toContain('// TypeScript interfaces for test_table')
@@ -473,7 +467,6 @@ describe('mutano with SQLite', () => {
 		expect(tsContent).toContain('export interface UpdateableTestTable {')
 		expect(tsContent).toContain('export interface SelectableTestTable {')
 
-		// Test Kysely content generation
 		const kyselyContent = generateContent({
 			table: 'test_table',
 			describes,
@@ -482,29 +475,23 @@ describe('mutano with SQLite', () => {
 			isCamelCase: true,
 			enumDeclarations: {},
 			defaultZodHeader,
-			defaultKyselyHeader,
 		})
 
-		expect(kyselyContent).toContain(
-			"import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';",
-		)
 		expect(kyselyContent).toContain('// Kysely type definitions for test_table')
-		expect(kyselyContent).toContain('export interface TestTableTable {')
+		expect(kyselyContent).toContain('export interface TestTable {')
 		expect(kyselyContent).toContain('id:')
 		expect(kyselyContent).toContain('name:')
 		expect(kyselyContent).toContain('email:')
 		expect(kyselyContent).toContain('score:')
 		expect(kyselyContent).toContain('createdAt:')
-		expect(kyselyContent).toContain('export interface TestDB {')
-		expect(kyselyContent).toContain('test_table: TestTableTable;')
 		expect(kyselyContent).toContain(
-			'export type TestTable = Selectable<TestTableTable>;',
+			'export type SelectableTestTable = Selectable<TestTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type NewTestTable = Insertable<TestTableTable>;',
+			'export type InsertableTestTable = Insertable<TestTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type TestTableUpdate = Updateable<TestTableTable>;',
+			'export type UpdateableTestTable = Updateable<TestTable>;',
 		)
 	})
 })

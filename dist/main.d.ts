@@ -7,9 +7,8 @@ export interface GenerateContentParams {
     isCamelCase: boolean;
     enumDeclarations: Record<string, string[]>;
     defaultZodHeader: string;
-    defaultKyselyHeader: string;
 }
-export declare function generateContent({ table, describes, config, destination, isCamelCase, enumDeclarations, defaultZodHeader, defaultKyselyHeader, }: GenerateContentParams): string;
+export declare function generateContent({ table, describes, config, destination, isCamelCase, enumDeclarations, defaultZodHeader, }: GenerateContentParams): string;
 export declare const defaultKyselyHeader = "import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n";
 export declare const defaultZodHeader = "import { z } from 'zod';\n\n";
 export declare function generate(config: Config): Promise<string[] | Record<string, string>>;
@@ -46,8 +45,7 @@ export type Destination = {
     type: 'kysely';
     header?: string;
     schemaName?: string;
-    folder?: string;
-    suffix?: string;
+    outFile?: string;
 };
 export interface Config {
     origin: {

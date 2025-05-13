@@ -2,7 +2,6 @@ import { describe, test } from 'vitest'
 import {
 	type Config,
 	type Desc,
-	defaultKyselyHeader,
 	defaultZodHeader,
 	generateContent,
 	getType,
@@ -74,8 +73,7 @@ describe('mutano', () => {
 		destinations: [
 			{
 				type: 'kysely',
-				folder: './kysely',
-				suffix: 'db',
+				outFile: './kysely/db.ts',
 			},
 		],
 		camelCase: true,
@@ -158,7 +156,6 @@ describe('mutano', () => {
 		expect(result).toEqual('z.string().trim().min(1)')
 	})
 
-	// Content generation tests
 	describe('Content generation', () => {
 		test('should generate Zod schema content without a database connection', ({
 			expect,
@@ -199,10 +196,8 @@ describe('mutano', () => {
 				isCamelCase: false,
 				enumDeclarations: {},
 				defaultZodHeader,
-				defaultKyselyHeader,
 			})
 
-			// Verify the content contains expected elements
 			expect(content).toContain("import { z } from 'zod';")
 			expect(content).toContain('export const user = z.object({')
 			expect(content).toContain('id: z.number().optional(),')
@@ -248,10 +243,8 @@ describe('mutano', () => {
 				isCamelCase: false,
 				enumDeclarations: {},
 				defaultZodHeader,
-				defaultKyselyHeader,
 			})
 
-			// Verify the content contains expected elements
 			expect(content).toContain('export interface User {')
 			expect(content).toContain('id: number;')
 			expect(content).toContain('name: string;')
@@ -297,24 +290,21 @@ describe('mutano', () => {
 				isCamelCase: false,
 				enumDeclarations: {},
 				defaultZodHeader,
-				defaultKyselyHeader,
 			})
 
-			// Verify the content contains expected elements
-			expect(content).toContain(
-				"import { Generated, ColumnType, Selectable, Insertable, Updateable } from 'kysely';",
-			)
-			expect(content).toContain(
-				'export type Json = ColumnType<JsonValue, string, string>;',
-			)
-			expect(content).toContain('export interface UserTable {')
+			expect(content).toContain('// Kysely type definitions for user')
+			expect(content).toContain('export interface User {')
 			expect(content).toContain('id: Generated<')
 			expect(content).toContain('name:')
 			expect(content).toContain('metadata: Json;')
-			expect(content).toContain('export type User = Selectable<UserTable>;')
-			expect(content).toContain('export type NewUser = Insertable<UserTable>;')
 			expect(content).toContain(
-				'export type UserUpdate = Updateable<UserTable>;',
+				'export type SelectableUser = Selectable<User>;',
+			)
+			expect(content).toContain(
+				'export type InsertableUser = Insertable<User>;',
+			)
+			expect(content).toContain(
+				'export type UpdateableUser = Updateable<User>;',
 			)
 		})
 	})

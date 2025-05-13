@@ -1,7 +1,7 @@
 {
 	"name": "mutano",
 	"type": "module",
-	"version": "2.1.0",
+	"version": "2.2.0",
 	"description": "Converts Prisma/MySQL/PostgreSQL/SQLite schemas to Zod/TS/Kysely interfaces",
 	"author": "Alisson Cavalcante Agiani <thelinuxlich@gmail.com>",
 	"license": "MIT",
@@ -19,15 +19,15 @@
 		"fs-extra": "^11.3.0",
 		"knex": "^3.1.0",
 		"mysql2": "^3.14.1",
-		"pg": "^8.15.6",
+		"pg": "^8.16.0",
 		"sqlite3": "^5.1.7"
 	},
 	"devDependencies": {
 		"@types/fs-extra": "^11.0.4",
-		"esbuild": "^0.25.3",
+		"esbuild": "^0.25.4",
 		"ts-node": "^10.9.2",
 		"tsx": "^4.19.4",
 		"typescript": "^5.8.3",
-		"vitest": "^3.1.2"
+		"vitest": "^3.1.3"
 	}
 }

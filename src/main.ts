@@ -261,10 +261,13 @@ export function getType(
 			if (schemaType === 'mysql') {
 				const matches = Type.match(enumRegex)
 				if (matches?.[1]) {
-					enumValues = matches[1].split(',').map((v) => v.trim())
+					enumValues = matches[1]
+						.split(',')
+						.map((v) => v.trim())
+						.sort()
 				}
 			} else if (EnumOptions && EnumOptions.length > 0) {
-				enumValues = EnumOptions.map((e) => `'${e}'`)
+				enumValues = EnumOptions.map((e) => `'${e}'`).sort()
 			}
 
 			if (enumValues.length === 0) {
@@ -378,10 +381,19 @@ export function getType(
 		return field.join('.')
 	}
 	const generateEnumLikeField = () => {
-		const value =
-			schemaType === 'mysql'
-				? Type.replace('enum(', '').replace(')', '').replace(/,/g, ',')
-				: EnumOptions?.map((e) => `'${e}'`).join(',')
+		let enumValues: string[] = []
+		if (schemaType === 'mysql') {
+			const matches = Type.match(enumRegex)
+			if (matches?.[1]) {
+				enumValues = matches[1]
+					.split(',')
+					.map((v) => v.trim())
+					.sort()
+			}
+		} else if (EnumOptions && EnumOptions.length > 0) {
+			enumValues = [...EnumOptions].sort().map((e) => `'${e}'`)
+		}
+		const value = enumValues.join(',')
 		const field = [`z.enum([${value}])`]
 		if (isNull) field.push(nullable)
 		else if (hasDefaultValue || (!hasDefaultValue && isGenerated))
@@ -407,7 +419,6 @@ export interface GenerateContentParams {
 	isCamelCase: boolean
 	enumDeclarations: Record<string, string[]>
 	defaultZodHeader: string
-	defaultKyselyHeader: string
 }
 
 export function generateContent({
@@ -418,30 +429,15 @@ export function generateContent({
 	isCamelCase,
 	enumDeclarations,
 	defaultZodHeader,
-	defaultKyselyHeader,
 }: GenerateContentParams): string {
 	let content = ''
+	const schemaType = config.origin.type
 	if (destination.type === 'kysely') {
-		const header = destination.header
-		const schemaName = destination.schemaName || 'DB'
-		content = header ? `${header}\n\n` : defaultKyselyHeader
-		content += `// JSON type definitions
-export type Json = ColumnType<JsonValue, string, string>;
-
-export type JsonArray = JsonValue[];
-
-export type JsonObject = {
-  [x: string]: JsonValue | undefined;
-};
-
-export type JsonPrimitive = boolean | number | string | null;
-
-export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
-
-`
+		// For Kysely, we only generate the table interface and helper types
+		// The DB interface will be generated in the consolidated file
 		content += `// Kysely type definitions for ${table}\n`
 		content += `\n// This interface defines the structure of the '${table}' table
-export interface ${camelCase(table, { pascalCase: true })}Table {`
+export interface ${camelCase(table, { pascalCase: true })} {`
 		for (const desc of describes) {
 			const field = isCamelCase ? camelCase(desc.Field) : desc.Field
 			const type = getType('table', desc, config, destination, table)
@@ -454,10 +450,22 @@ export interface ${camelCase(table, { pascalCase: true })}Table {`
 					desc.Extra.toLowerCase().includes('default_generated')
 				const isNullable = desc.Null === 'YES'
 				const isJsonField = desc.Type.toLowerCase().includes('json')
+				const hasDefaultValue = desc.Default !== null
+				const isEnum =
+					schemaType !== 'sqlite' &&
+					enumTypes[schemaType].includes(
+						schemaType === 'mysql'
+							? desc.Type.split('(')[0].split(' ')[0]
+							: desc.Type,
+					)
 
 				if (isJsonField) {
 					kyselyType = 'Json'
-				} else if (isAutoIncrement || isDefaultGenerated) {
+				} else if (
+					isAutoIncrement ||
+					isDefaultGenerated ||
+					(isEnum && hasDefaultValue)
+				) {
 					kyselyType = `Generated<${kyselyType}>`
 				}
 
@@ -475,15 +483,10 @@ export interface ${camelCase(table, { pascalCase: true })}Table {`
 		content = `${content}
 }
 
-// Define the database interface
-export interface ${schemaName} {
-  ${table}: ${camelCase(table, { pascalCase: true })}Table;
-}
-
-// Use these types for inserting, selecting and updating the table
-export type ${camelCase(table, { pascalCase: true })} = Selectable<${camelCase(table, { pascalCase: true })}Table>;
-export type New${camelCase(table, { pascalCase: true })} = Insertable<${camelCase(table, { pascalCase: true })}Table>;
-export type ${camelCase(table, { pascalCase: true })}Update = Updateable<${camelCase(table, { pascalCase: true })}Table>;
+// Helper types for ${table}
+export type Selectable${camelCase(table, { pascalCase: true })} = Selectable<${camelCase(table, { pascalCase: true })}>;
+export type Insertable${camelCase(table, { pascalCase: true })} = Insertable<${camelCase(table, { pascalCase: true })}>;
+export type Updateable${camelCase(table, { pascalCase: true })} = Updateable<${camelCase(table, { pascalCase: true })}>;
 `
 	} else if (destination.type === 'ts') {
 		const modelType = destination.modelType || 'interface'
@@ -650,6 +653,12 @@ export async function generate(
 	let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null
 	let db: ReturnType<typeof knex> | null = null
 
+	interface KyselyTableContent {
+		table: string
+		content: string
+	}
+	const kyselyTableContents: Record<string, KyselyTableContent[]> = {}
+
 	if (config.destinations.length === 0) {
 		throw new Error('Empty destinations object.')
 	}
@@ -802,7 +811,7 @@ export async function generate(
 								AND column_name = $3
 							)
 						ORDER BY
-							e.enumsortorder
+							e.enumlabel
 					`,
 						[schema, table, column.Field],
 					)
@@ -823,7 +832,6 @@ export async function generate(
 					notnull: number
 					type: string
 				}) => {
-					// Detect generated default values in SQLite
 					let extra = ''
 					if (row.dflt_value !== null) {
 						// Check for ROWID-based autoincrement
@@ -916,24 +924,28 @@ export async function generate(
 		}
 		if (isCamelCase) table = camelCase(table)
 
-		// Process each destination
 		if (!config.destinations || config.destinations.length === 0) {
 			throw new Error('No destinations specified')
 		}
 
-		for (const destination of config.destinations) {
+		const kyselyDestinations = config.destinations.filter(
+			(d) => d.type === 'kysely',
+		)
+		const nonKyselyDestinations = config.destinations.filter(
+			(d) => d.type !== 'kysely',
+		)
+
+		for (const destination of nonKyselyDestinations) {
 			const content = generateContent({
 				table,
-				describes,
+				describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
 				config,
 				destination,
 				isCamelCase: isCamelCase === true,
 				enumDeclarations,
 				defaultZodHeader,
-				defaultKyselyHeader,
 			})
 
-			// Get destination-specific folder and suffix
 			const suffix = destination.suffix || ''
 			const folder = destination.folder || '.'
 
@@ -948,9 +960,97 @@ export async function generate(
 				fs.outputFileSync(dest, content)
 			}
 		}
+
+		for (const destination of kyselyDestinations) {
+			const content = generateContent({
+				table,
+				describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
+				config,
+				destination,
+				isCamelCase: isCamelCase === true,
+				enumDeclarations,
+				defaultZodHeader,
+			})
+
+			const outFile = destination.outFile || 'db.ts'
+			if (!kyselyTableContents[outFile]) {
+				kyselyTableContents[outFile] = []
+			}
+			kyselyTableContents[outFile].push({
+				table,
+				content,
+			})
+
+			if (config.dryRun) {
+				const tempKey = `${table}.kysely.temp`
+				dryRunOutput[tempKey] = content
+			}
+		}
 	}
 
 	if (db) await db.destroy()
+
+	for (const [outFile, tableContents] of Object.entries(kyselyTableContents)) {
+		if (tableContents.length === 0) continue
+
+		const kyselyDestination = config.destinations.find(
+			(d) => d.type === 'kysely',
+		)
+		const header = kyselyDestination?.header || defaultKyselyHeader
+		const schemaName = kyselyDestination?.schemaName || 'DB'
+
+		// Start with the header and JSON type definitions
+		let consolidatedContent = `${header}\n\n// JSON type definitions
+export type Json = ColumnType<JsonValue, string, string>;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
+`
+
+		consolidatedContent += '// Table Interfaces\n'
+		for (const { content } of tableContents) {
+			consolidatedContent += `${content}\n`
+		}
+
+		consolidatedContent += `\n// Database Interface\nexport interface ${schemaName} {\n`
+
+		const sortedTableEntries = tableContents
+			.map(({ table }) => {
+				const pascalTable = camelCase(table, { pascalCase: true })
+				const tableKey = isCamelCase ? camelCase(table) : table
+				return { tableKey, pascalTable }
+			})
+			.sort((a, b) => a.tableKey.localeCompare(b.tableKey))
+
+		for (const { tableKey, pascalTable } of sortedTableEntries) {
+			consolidatedContent += `  ${tableKey}: ${pascalTable};\n`
+		}
+
+		consolidatedContent += '}\n'
+
+		if (config.dryRun) {
+			const fileName = path.basename(outFile)
+			dryRunOutput[fileName] = consolidatedContent
+			for (const key of Object.keys(dryRunOutput)) {
+				if (key.endsWith('.kysely.temp')) {
+					delete dryRunOutput[key]
+				}
+			}
+		} else {
+			const dest = path.resolve(outFile)
+			dests.push(dest)
+			if (!config.silent) console.log('Created:', dest)
+			fs.outputFileSync(dest, consolidatedContent)
+		}
+	}
 
 	return config.dryRun ? dryRunOutput : dests
 }
@@ -1082,8 +1182,7 @@ export type Destination =
 			type: 'kysely'
 			header?: string
 			schemaName?: string
-			folder?: string
-			suffix?: string
+			outFile?: string
 	  }
 
 export interface Config {
