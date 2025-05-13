@@ -779,7 +779,8 @@ async function generate(config) {
       const folder = destination.folder || ".";
       const file = suffix !== "" ? `${table}.${suffix}.ts` : `${table}.ts`;
       if (config.dryRun) {
-        dryRunOutput[file] = content;
+        const absolutePath = path.resolve(path.join(folder, file));
+        dryRunOutput[absolutePath] = content;
       } else {
         const dest = path.join(folder, file);
         dests.push(dest);
@@ -806,7 +807,7 @@ async function generate(config) {
         content
       });
       if (config.dryRun) {
-        const tempKey = `${table}.kysely.temp`;
+        const tempKey = path.resolve(`${table}.kysely.temp`);
         dryRunOutput[tempKey] = content;
       }
     }
@@ -855,8 +856,8 @@ export interface ${schemaName} {
     }
     consolidatedContent += "}\n";
     if (config.dryRun) {
-      const fileName = path.basename(outFile);
-      dryRunOutput[fileName] = consolidatedContent;
+      const absolutePath = path.resolve(outFile);
+      dryRunOutput[absolutePath] = consolidatedContent;
       for (const key of Object.keys(dryRunOutput)) {
         if (key.endsWith(".kysely.temp")) {
           delete dryRunOutput[key];
@@ -869,7 +870,21 @@ export interface ${schemaName} {
       fs.outputFileSync(dest, consolidatedContent);
     }
   }
-  return config.dryRun ? dryRunOutput : dests;
+  if (!config.dryRun) {
+    const result2 = {};
+    for (const dest of dests) {
+      const absolutePath = path.resolve(dest);
+      const content = fs.readFileSync(dest, "utf8");
+      result2[absolutePath] = content;
+    }
+    return result2;
+  }
+  const result = {};
+  for (const [key, content] of Object.entries(dryRunOutput)) {
+    const absolutePath = path.resolve(key);
+    result[absolutePath] = content;
+  }
+  return result;
 }
 export {
   defaultKyselyHeader,

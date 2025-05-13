@@ -647,7 +647,7 @@ export const defaultZodHeader = "import { z } from 'zod';\n\n"
 
 export async function generate(
 	config: Config,
-): Promise<string[] | Record<string, string>> {
+): Promise<Record<string, string>> {
 	let tables: string[] = []
 	let prismaTables: (Model | null)[] = []
 	let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null
@@ -952,7 +952,9 @@ export async function generate(
 			const file = suffix !== '' ? `${table}.${suffix}.ts` : `${table}.ts`
 
 			if (config.dryRun) {
-				dryRunOutput[file] = content
+				// Use absolute path as the key
+				const absolutePath = path.resolve(path.join(folder, file))
+				dryRunOutput[absolutePath] = content
 			} else {
 				const dest = path.join(folder, file)
 				dests.push(dest)
@@ -982,7 +984,8 @@ export async function generate(
 			})
 
 			if (config.dryRun) {
-				const tempKey = `${table}.kysely.temp`
+				// Use a temporary key with absolute path
+				const tempKey = path.resolve(`${table}.kysely.temp`)
 				dryRunOutput[tempKey] = content
 			}
 		}
@@ -1037,8 +1040,8 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 		consolidatedContent += '}\n'
 
 		if (config.dryRun) {
-			const fileName = path.basename(outFile)
-			dryRunOutput[fileName] = consolidatedContent
+			const absolutePath = path.resolve(outFile)
+			dryRunOutput[absolutePath] = consolidatedContent
 			for (const key of Object.keys(dryRunOutput)) {
 				if (key.endsWith('.kysely.temp')) {
 					delete dryRunOutput[key]
@@ -1052,7 +1055,23 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 		}
 	}
 
-	return config.dryRun ? dryRunOutput : dests
+	if (!config.dryRun) {
+		const result: Record<string, string> = {}
+		for (const dest of dests) {
+			const absolutePath = path.resolve(dest)
+			const content = fs.readFileSync(dest, 'utf8')
+			result[absolutePath] = content
+		}
+		return result
+	}
+
+	const result: Record<string, string> = {}
+	for (const [key, content] of Object.entries(dryRunOutput)) {
+		const absolutePath = path.resolve(key)
+		result[absolutePath] = content
+	}
+
+	return result
 }
 
 type MySQLValidTypes =

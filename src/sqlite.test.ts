@@ -153,18 +153,16 @@ describe('mutano with SQLite', () => {
 		const result = await generate(sqliteConfig)
 
 		// Check if files were created
-		expect(Array.isArray(result)).toBe(true)
-		if (Array.isArray(result)) {
-			expect(result.length).toBeGreaterThan(0)
+		expect(typeof result).toBe('object')
+		expect(Object.keys(result).length).toBeGreaterThan(0)
 
-			// Check for specific files
-			const fileNames = result.map((file) => path.basename(file))
-			expect(fileNames).toContain('users.schema.ts')
-			expect(fileNames).toContain('users.type.ts')
-			expect(fileNames).toContain('posts.schema.ts')
-			expect(fileNames).toContain('posts.type.ts')
-			expect(fileNames).toContain('db.ts') // Consolidated Kysely file
-		}
+		// Check for specific files - now using absolute paths
+		const fileNames = Object.keys(result).map((file) => path.basename(file))
+		expect(fileNames).toContain('users.schema.ts')
+		expect(fileNames).toContain('users.type.ts')
+		expect(fileNames).toContain('posts.schema.ts')
+		expect(fileNames).toContain('posts.type.ts')
+		expect(fileNames).toContain('db.ts') // Consolidated Kysely file
 	})
 
 	test('should generate with dryRun option', async () => {
@@ -175,14 +173,19 @@ describe('mutano with SQLite', () => {
 
 		const result = await generate(dryRunConfig)
 
-		// Check if content was returned instead of file paths
-		expect(Array.isArray(result)).toBe(false)
-		if (!Array.isArray(result)) {
-			expect(Object.keys(result).length).toBeGreaterThan(0)
-			expect(result['users.schema.ts']).toBeDefined()
-			expect(result['users.type.ts']).toBeDefined()
-			expect(result['db.ts']).toBeDefined() // Consolidated Kysely file
+		// Check if content was returned
+		expect(typeof result).toBe('object')
+		expect(Object.keys(result).length).toBeGreaterThan(0)
+
+		// Get the file contents by basename
+		const fileContents: Record<string, string> = {}
+		for (const [filePath, content] of Object.entries(result)) {
+			fileContents[path.basename(filePath)] = content
 		}
+
+		expect(fileContents['users.schema.ts']).toBeDefined()
+		expect(fileContents['users.type.ts']).toBeDefined()
+		expect(fileContents['db.ts']).toBeDefined() // Consolidated Kysely file
 	})
 
 	test('should handle SQLite type mapping correctly', () => {
@@ -280,16 +283,20 @@ describe('mutano with SQLite', () => {
 		const result = await generate(camelCaseConfig)
 
 		// Check if camelCase was applied
-		if (!Array.isArray(result)) {
-			// Check Zod output
-			expect(result['users.schema.ts']).toContain('profilePicture:')
-
-			// Check TypeScript output
-			expect(result['users.type.ts']).toContain('profilePicture:')
-
-			// Check Kysely output
-			expect(result['db.ts']).toContain('profilePicture:')
+		// Get the file contents by basename
+		const fileContents: Record<string, string> = {}
+		for (const [filePath, content] of Object.entries(result)) {
+			fileContents[path.basename(filePath)] = content
 		}
+
+		// Check Zod output
+		expect(fileContents['users.schema.ts']).toContain('profilePicture:')
+
+		// Check TypeScript output
+		expect(fileContents['users.type.ts']).toContain('profilePicture:')
+
+		// Check Kysely output
+		expect(fileContents['db.ts']).toContain('profilePicture:')
 	})
 
 	test('should respect custom headers', async () => {
@@ -324,22 +331,26 @@ describe('mutano with SQLite', () => {
 		const result = await generate(customHeaderConfig)
 
 		// Check if custom headers were applied
-		if (!Array.isArray(result)) {
-			// Check Zod output
-			expect(result['users.schema.ts']).toContain(
-				"import { customValidator } from './validators';",
-			)
-
-			// Check TypeScript output
-			expect(result['users.type.ts']).toContain(
-				"import type { Email } from './types';",
-			)
-
-			// Check Kysely output
-			expect(result['db.ts']).toContain(
-				"import { CustomTypes } from './types';",
-			)
+		// Get the file contents by basename
+		const fileContents: Record<string, string> = {}
+		for (const [filePath, content] of Object.entries(result)) {
+			fileContents[path.basename(filePath)] = content
 		}
+
+		// Check Zod output
+		expect(fileContents['users.schema.ts']).toContain(
+			"import { customValidator } from './validators';",
+		)
+
+		// Check TypeScript output
+		expect(fileContents['users.type.ts']).toContain(
+			"import type { Email } from './types';",
+		)
+
+		// Check Kysely output
+		expect(fileContents['db.ts']).toContain(
+			"import { CustomTypes } from './types';",
+		)
 	})
 
 	test('should respect type overrides from config', async () => {
@@ -363,13 +374,17 @@ describe('mutano with SQLite', () => {
 		const result = await generate(overrideConfig)
 
 		// Check if type overrides were applied
-		if (!Array.isArray(result)) {
-			// Check for the overridden text type
-			expect(result['posts.schema.ts']).toContain('z.string().max(1000)')
-
-			// Check for the overridden integer type
-			expect(result['users.schema.ts']).toContain('z.number().positive()')
+		// Get the file contents by basename
+		const fileContents: Record<string, string> = {}
+		for (const [filePath, content] of Object.entries(result)) {
+			fileContents[path.basename(filePath)] = content
 		}
+
+		// Check for the overridden text type
+		expect(fileContents['posts.schema.ts']).toContain('z.string().max(1000)')
+
+		// Check for the overridden integer type
+		expect(fileContents['users.schema.ts']).toContain('z.number().positive()')
 	})
 
 	test('should generate content for all destination types', () => {
