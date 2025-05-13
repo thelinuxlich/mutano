@@ -873,9 +873,9 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
-export type Decimal = ColumnType<string, number | string>
+export type Decimal = ColumnType<string, number | string, number | string>
 
-export type BigInt = ColumnType<string, number | string>
+export type BigInt = ColumnType<string, number | string, number | string>
 `;
     consolidatedContent += "// Table Interfaces\n";
     for (const { content } of tableContents) {
