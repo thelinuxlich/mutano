@@ -667,7 +667,7 @@ async function generate(config) {
     });
   }
   let describes = [];
-  for (let table of tables) {
+  for (let table of tables.sort((a, b) => a.localeCompare(b))) {
     if (config.origin.type === "mysql" && db) {
       const d = await db.raw(`SHOW FULL COLUMNS FROM ${table}`);
       describes = d[0];
