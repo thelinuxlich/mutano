@@ -505,6 +505,7 @@ export type UserUpdate = Updateable<UserTable>;
 | destinations[].useDateType | (Zod only) Use a specialized Zod type for date-like fields instead of string |
 | destinations[].useTrim | (Zod only) Use `z.string().trim()` instead of `z.string()` |
 | destinations[].nullish | (Zod only) Use `nullish()` instead of `nullable()` for nullable fields. In updateable schemas, fields that were already nullable will become nullish |
+| destinations[].version | (Zod only) Zod version to use. Defaults to 3. Set to 4 to use Zod v4 |
 | destinations[].requiredString | (Zod only) Add `min(1)` for non-nullable string fields |
 | destinations[].enumType | (TypeScript only) How to represent enum types: "union" (default) or "enum" |
 | destinations[].modelType | (TypeScript only) How to represent models: "interface" (default) or "type" |

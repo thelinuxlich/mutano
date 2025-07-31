@@ -10,11 +10,11 @@ export interface GenerateContentParams {
     destination: Destination;
     isCamelCase: boolean;
     enumDeclarations: Record<string, string[]>;
-    defaultZodHeader: string;
+    defaultZodHeader: (version: 3 | 4) => string;
 }
 export declare function generateContent({ table, describes, config, destination, isCamelCase, enumDeclarations, defaultZodHeader, }: GenerateContentParams): string;
 export declare const defaultKyselyHeader = "import { ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n";
-export declare const defaultZodHeader = "import { z } from 'zod';\n\n";
+export declare const defaultZodHeader: (version: 3 | 4) => string;
 export declare function generate(config: Config): Promise<Record<string, string>>;
 type MySQLValidTypes = 'date' | 'datetime' | 'timestamp' | 'time' | 'year' | 'char' | 'varchar' | 'tinytext' | 'text' | 'mediumtext' | 'longtext' | 'json' | 'decimal' | 'tinyint' | 'smallint' | 'mediumint' | 'int' | 'bigint' | 'float' | 'double' | 'enum';
 type PostgresValidTypes = 'date' | 'timestamp' | 'timestamptz' | 'timestamp without time zone' | 'timestamp with time zone' | 'time' | 'timetz' | 'interval' | 'character' | 'varchar' | 'character varying' | 'text' | 'json' | 'jsonb' | 'uuid' | 'name' | 'citext' | 'numeric' | 'decimal' | 'smallint' | 'integer' | 'bigint' | 'real' | 'double precision' | 'serial' | 'bigserial' | 'boolean' | 'bool' | 'USER-DEFINED';
@@ -31,6 +31,7 @@ export interface Desc {
 }
 export type Destination = {
     type: 'zod';
+    version?: 3 | 4;
     header?: string;
     useDateType?: boolean;
     useTrim?: boolean;
