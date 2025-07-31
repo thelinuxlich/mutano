@@ -23,6 +23,7 @@ describe('mutano', () => {
 		destinations: [
 			{
 				type: 'zod',
+				version: 4,
 				useDateType: true,
 				useTrim: false,
 				nullish: true,
@@ -198,7 +199,7 @@ describe('mutano', () => {
 				defaultZodHeader,
 			})
 
-			expect(content).toContain("import { z } from 'zod';")
+			expect(content).toContain("import { z } from 'zod/v4';")
 			expect(content).toContain('export const user = z.object({')
 			expect(content).toContain('id: z.number().optional(),')
 			expect(content).toContain('name: z.string().min(1),')

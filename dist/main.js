@@ -506,9 +506,7 @@ export type ${camelCase(table, { pascalCase: true })} = {`;
 `;
   } else if (destination.type === "zod") {
     const header = destination.header;
-    content = header ? `${header}
-
-` : defaultZodHeader2(destination.version || 3);
+    content = header ? header + "\n\n" : defaultZodHeader2(destination.version || 3);
     content += `export const ${table} = z.object({`;
     for (const desc of describes) {
       const field = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -574,9 +572,7 @@ export type Selectable${camelCase(`${table}Type`, {
   return content;
 }
 const defaultKyselyHeader = "import { ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n";
-const defaultZodHeader = (version) => `import { z } from 'zod${version === 3 ? "" : "/v4"}';
-
-`;
+const defaultZodHeader = (version) => "import { z } from 'zod" + (version === 3 ? "" : "/v4") + "';\n\n";
 async function generate(config) {
   let tables = [];
   let prismaTables = [];

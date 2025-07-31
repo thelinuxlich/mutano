@@ -684,7 +684,7 @@ export type Updateable${camelCase(table, { pascalCase: true })} = Updateable<${c
   } else if (destination.type === 'zod') {
     const header = destination.header
 
-    content = header ? `${header}\n\n` : defaultZodHeader(destination.version || 3)
+    content = header ? header + "\n\n" : defaultZodHeader(destination.version || 3)
     content += `export const ${table} = z.object({`
     for (const desc of describes) {
       const field = isCamelCase ? camelCase(desc.Field) : desc.Field
@@ -754,7 +754,7 @@ export type Selectable${camelCase(`${table}Type`, {
 export const defaultKyselyHeader =
   "import { ColumnType, Selectable, Insertable, Updateable } from 'kysely';\n\n"
 
-export const defaultZodHeader = (version: 3 | 4) => `import { z } from 'zod${version === 3 ? '' : '/v4'}';\n\n`
+export const defaultZodHeader = (version: 3 | 4) => "import { z } from 'zod" + (version === 3 ? '' : '/v4')+"';\n\n"
 
 export async function generate(
   config: Config,
