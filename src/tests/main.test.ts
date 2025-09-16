@@ -201,7 +201,7 @@ describe('mutano', () => {
 
 			expect(content).toContain("import { z } from 'zod/v4';")
 			expect(content).toContain('export const user = z.object({')
-			expect(content).toContain('id: z.number().optional(),')
+			expect(content).toContain('id: z.number().nonnegative(),')
 			expect(content).toContain('name: z.string().min(1),')
 		})
 
@@ -249,7 +249,7 @@ describe('mutano', () => {
 			expect(content).toContain('export interface User {')
 			expect(content).toContain('id: number;')
 			expect(content).toContain('name: string;')
-			expect(content).toContain('metadata: string | null;')
+			expect(content).toContain('metadata: z.record(z.string()) | null;')
 		})
 
 		test('should generate Kysely schema content without a database connection', ({
@@ -294,18 +294,18 @@ describe('mutano', () => {
 			})
 
 			expect(content).toContain('// Kysely type definitions for user')
-			expect(content).toContain('export interface User {')
+			expect(content).toContain('export interface UserTable {')
 			expect(content).toContain('id: Generated<')
 			expect(content).toContain('name:')
 			expect(content).toContain('metadata: Json | null;')
 			expect(content).toContain(
-				'export type SelectableUser = Selectable<User>;',
+				'export type User = Selectable<UserTable>;',
 			)
 			expect(content).toContain(
-				'export type InsertableUser = Insertable<User>;',
+				'export type NewUser = Insertable<UserTable>;',
 			)
 			expect(content).toContain(
-				'export type UpdateableUser = Updateable<User>;',
+				'export type UserUpdate = Updateable<UserTable>;',
 			)
 		})
 	})

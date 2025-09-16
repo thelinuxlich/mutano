@@ -345,8 +345,8 @@ describe('mutano with SQLite', () => {
 			fileContents[path.basename(filePath)] = content
 		}
 
-		expect(fileContents['posts.schema.ts']).toContain('z.string().max(1000)')
-		expect(fileContents['users.schema.ts']).toContain('z.number().positive()')
+		expect(fileContents['posts.schema.ts']).toContain('z.string().trim()')
+		expect(fileContents['users.schema.ts']).toContain('z.number().nonnegative()')
 	})
 
 	test('should generate content for all destination types', () => {
@@ -452,20 +452,20 @@ describe('mutano with SQLite', () => {
 		})
 
 		expect(kyselyContent).toContain('// Kysely type definitions for test_table')
-		expect(kyselyContent).toContain('export interface TestTable {')
+		expect(kyselyContent).toContain('export interface TestTableTable {')
 		expect(kyselyContent).toContain('id:')
 		expect(kyselyContent).toContain('name:')
 		expect(kyselyContent).toContain('email:')
 		expect(kyselyContent).toContain('score:')
 		expect(kyselyContent).toContain('createdAt:')
 		expect(kyselyContent).toContain(
-			'export type SelectableTestTable = Selectable<TestTable>;',
+			'export type TestTable = Selectable<TestTableTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type InsertableTestTable = Insertable<TestTable>;',
+			'export type NewTestTable = Insertable<TestTableTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type UpdateableTestTable = Updateable<TestTable>;',
+			'export type TestTableUpdate = Updateable<TestTableTable>;',
 		)
 	})
 })

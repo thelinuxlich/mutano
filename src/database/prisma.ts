@@ -1,0 +1,171 @@
+/**
+ * Prisma schema extraction utilities
+ */
+
+import { readFileSync } from 'node:fs'
+import {
+  type Attribute,
+  type Enumerator,
+  type Field,
+  type Model,
+  createPrismaSchemaBuilder,
+} from '@mrleebo/prisma-ast'
+import type { Config, Desc } from '../types/index.js'
+
+/**
+ * Extract tables and views from Prisma schema
+ */
+export function extractPrismaEntities(config: Config): {
+  tables: string[]
+  views: string[]
+  enumDeclarations: Record<string, string[]>
+} {
+  if (config.origin.type !== 'prisma') {
+    return { tables: [], views: [], enumDeclarations: {} }
+  }
+
+  const schemaContent = readFileSync(config.origin.path, 'utf-8')
+  const schema = createPrismaSchemaBuilder(schemaContent)
+
+  // Extract tables (models)
+  const prismaModels = schema.findAllByType('model', {})
+  const tables = prismaModels
+    .filter((m): m is Model => m !== null)
+    .map((model) => model.name)
+
+  // Extract views
+  const prismaViews = schema.findAllByType('view', {})
+  const views = prismaViews
+    .filter((v) => v !== null)
+    .map((view) => view.name)
+
+  // Extract enums
+  const enumDeclarations: Record<string, string[]> = {}
+  const prismaEnums = schema.findAllByType('enum', {})
+  
+  for (const prismaEnum of prismaEnums) {
+    if (prismaEnum && 'name' in prismaEnum && 'enumerators' in prismaEnum) {
+      const enumName = prismaEnum.name
+      const enumerators = prismaEnum.enumerators as Enumerator[]
+      enumDeclarations[enumName] = enumerators.map((e) => e.name)
+    }
+  }
+
+  return { tables, views, enumDeclarations }
+}
+
+/**
+ * Extract column descriptions from Prisma model or view
+ */
+export function extractPrismaColumnDescriptions(
+  config: Config,
+  entityName: string,
+  enumDeclarations: Record<string, string[]>
+): Desc[] {
+  if (config.origin.type !== 'prisma') {
+    return []
+  }
+
+  const schemaContent = readFileSync(config.origin.path, 'utf-8')
+  const schema = createPrismaSchemaBuilder(schemaContent)
+
+  // Try to find as model first, then as view
+  let entity = schema.findByType('model', { name: entityName }) as any
+  if (!entity) {
+    entity = schema.findByType('view', { name: entityName }) as any
+  }
+
+  if (!entity || !('properties' in entity)) {
+    return []
+  }
+
+  const fields = entity.properties.filter(
+    (p: any): p is Field =>
+      p.type === 'field' &&
+      p.array !== true &&
+      !p.attributes?.find((a: Attribute) => a.name === 'relation'),
+  )
+
+  return fields.map((field: any) => {
+    let defaultGenerated = false
+    let defaultValue: string | null = null
+
+    // Check for default values and auto-generation
+    if (field.attributes) {
+      for (const attr of field.attributes) {
+        if (attr.name === 'default') {
+          if (attr.args && attr.args.length > 0) {
+            const arg = attr.args[0]
+            if (typeof arg === 'object' && 'value' in arg) {
+              if (arg.value === 'autoincrement()' || arg.value === 'cuid()' || arg.value === 'uuid()') {
+                defaultGenerated = true
+              } else {
+                defaultValue = String(arg.value)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Determine if field is optional
+    const isOptional = field.optional === true
+
+    // Handle enum types
+    let enumOptions: string[] | undefined
+    const fieldType = String(field.fieldType)
+    if (enumDeclarations[fieldType]) {
+      enumOptions = enumDeclarations[fieldType]
+    }
+
+    return {
+      Field: field.name,
+      Default: defaultValue,
+      Extra: defaultGenerated ? 'auto_increment' : '',
+      Null: isOptional ? 'YES' : 'NO',
+      Type: fieldType,
+      Comment: '', // Prisma doesn't have column comments in the same way
+      EnumOptions: enumOptions,
+    }
+  })
+}
+
+/**
+ * Check if Prisma schema has views enabled
+ */
+export function hasViewsEnabled(config: Config): boolean {
+  if (config.origin.type !== 'prisma') {
+    return false
+  }
+
+  try {
+    const schemaContent = readFileSync(config.origin.path, 'utf-8')
+    const schema = createPrismaSchemaBuilder(schemaContent)
+    
+    // Check if any generator has views in previewFeatures
+    const generators = schema.findAllByType('generator', {})
+    
+    for (const generator of generators) {
+      if (generator && 'assignments' in generator) {
+        const previewFeatures = generator.assignments.find(
+          (a: any) => a.key === 'previewFeatures'
+        )
+        
+        if (previewFeatures && 'value' in previewFeatures) {
+          const features = previewFeatures.value
+          if (Array.isArray(features)) {
+            return features.some((f) => 
+              typeof f === 'string' && f.includes('views')
+            )
+          } else if (typeof features === 'string') {
+            return features.includes('views')
+          }
+        }
+      }
+    }
+    
+    return false
+  } catch (error) {
+    return false
+  }
+}

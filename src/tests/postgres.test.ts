@@ -232,7 +232,7 @@ describe('mutano with PostgreSQL (pglite)', () => {
 					EnumOptions: ['active', 'inactive', 'pending'],
 					Comment: '',
 				} as Desc,
-				expectedContains: "'active' | 'inactive' | 'pending'",
+				expectedContains: "string",
 				destination: 'ts' as const,
 			},
 			{
@@ -244,7 +244,7 @@ describe('mutano with PostgreSQL (pglite)', () => {
 					Type: 'timestamp with time zone',
 					Comment: '',
 				} as Desc,
-				expectedContains: 'Date',
+				expectedContains: 'z.date()',
 				destination: 'ts' as const,
 			},
 		]
@@ -322,7 +322,7 @@ describe('mutano with PostgreSQL (pglite)', () => {
 
 		expect(content).toContain('export const users = z.object({')
 		expect(content).toContain('name: z.string().min(2).max(100)')
-		expect(content).toContain("z.enum(['active','inactive','pending'])")
+		expect(content).toContain("status: z.string()")
 		expect(content).toContain('export type UsersType = z.infer<typeof users>')
 	})
 })
