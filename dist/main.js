@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import camelCase from 'camelcase';
-import * as fs from 'fs-extra';
+import { writeFile } from 'node:fs/promises';
+import { ensureDir } from 'fs-extra/esm';
 import knex from 'knex';
 import { readFileSync } from 'node:fs';
 import { createPrismaSchemaBuilder } from '@mrleebo/prisma-ast';
@@ -1003,8 +1004,8 @@ export interface ${schemaName} {
     }
     for (const [filePath, content] of Object.entries(results)) {
       const fullPath = path.resolve(filePath);
-      await fs.ensureDir(path.dirname(fullPath));
-      await fs.writeFile(fullPath, content);
+      await ensureDir(path.dirname(fullPath));
+      await writeFile(fullPath, content);
       if (!config.silent) {
         console.log(`Created: ${filePath}`);
       }
