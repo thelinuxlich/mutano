@@ -86,6 +86,7 @@ export interface Config {
   dryRun?: boolean
   magicComments?: boolean
   includeViews?: boolean
+  enumDeclarations?: Record<string, string[]>
 }
 
 export interface GenerateContentParams {

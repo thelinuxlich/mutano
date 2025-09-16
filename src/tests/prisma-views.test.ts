@@ -124,7 +124,7 @@ view UserStats {
     expect(userProfileContent).toContain('id: z.number()')
     expect(userProfileContent).toContain('email: z.string()')
     expect(userProfileContent).toContain('name: z.string().nullable()')
-    expect(userProfileContent).toContain('status: z.string()') // Enum in view becomes string
+    expect(userProfileContent).toContain("status: z.enum(['ACTIVE','INACTIVE','PENDING'])") // Enum in view should remain enum
     expect(userProfileContent).toContain('export type UserProfileViewType = z.infer<typeof UserProfile_view>')
 
     // Should not contain insertable/updateable schemas for views
@@ -304,8 +304,8 @@ model User {
     })
 
     const userProfileContent = result['UserProfile.zod.ts']
-    // Should properly handle enum types in views (enums in views become strings)
-    expect(userProfileContent).toContain('status: z.string()')
+    // Should properly handle enum types in views (enums should remain enums)
+    expect(userProfileContent).toContain("status: z.enum(['ACTIVE','INACTIVE','PENDING'])")
   })
 
   test('should handle Prisma views with Decimal fields', async () => {

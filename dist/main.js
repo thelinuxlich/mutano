@@ -263,7 +263,8 @@ function getType(op, desc, config, destination) {
   }
   const enumTypesForSchema = typeMappings.enumTypes[schemaType] || [];
   const isEnum = enumTypesForSchema.includes(type);
-  if (isEnum) {
+  const isPrismaEnum = schemaType === "prisma" && config.enumDeclarations && config.enumDeclarations[type];
+  if (isEnum || isPrismaEnum) {
     let enumValues = [];
     if (schemaType === "mysql" && type === "enum") {
       const match = Type.match(enumRegex);
@@ -272,6 +273,8 @@ function getType(op, desc, config, destination) {
       }
     } else if (schemaType === "postgres" && EnumOptions) {
       enumValues = EnumOptions;
+    } else if (isPrismaEnum && config.enumDeclarations) {
+      enumValues = config.enumDeclarations[type];
     }
     if (enumValues.length > 0) {
       const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
@@ -896,6 +899,7 @@ async function generate(config) {
       tables = prismaEntities.tables;
       views = prismaEntities.views;
       enumDeclarations = prismaEntities.enumDeclarations;
+      config.enumDeclarations = enumDeclarations;
     } else {
       db = createDatabaseConnection(config);
       tables = await extractTables(db, config);

@@ -82,6 +82,7 @@ interface Config {
     dryRun?: boolean;
     magicComments?: boolean;
     includeViews?: boolean;
+    enumDeclarations?: Record<string, string[]>;
 }
 interface GenerateContentParams {
     table: string;

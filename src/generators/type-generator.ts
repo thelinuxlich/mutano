@@ -150,9 +150,13 @@ export function getType(
   // Handle enum types
   const enumTypesForSchema = (typeMappings.enumTypes as any)[schemaType] || []
   const isEnum = enumTypesForSchema.includes(type)
-  if (isEnum) {
+
+  // For Prisma, also check if the type exists in enumDeclarations
+  const isPrismaEnum = schemaType === 'prisma' && config.enumDeclarations && config.enumDeclarations[type]
+
+  if (isEnum || isPrismaEnum) {
     let enumValues: string[] = []
-    
+
     if (schemaType === 'mysql' && type === 'enum') {
       const match = Type.match(enumRegex)
       if (match) {
@@ -160,6 +164,8 @@ export function getType(
       }
     } else if (schemaType === 'postgres' && EnumOptions) {
       enumValues = EnumOptions
+    } else if (isPrismaEnum && config.enumDeclarations) {
+      enumValues = config.enumDeclarations[type]
     }
 
     if (enumValues.length > 0) {

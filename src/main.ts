@@ -68,6 +68,8 @@ export async function generate(config: Config): Promise<Record<string, string>> 
       tables = prismaEntities.tables
       views = prismaEntities.views
       enumDeclarations = prismaEntities.enumDeclarations
+      // Add enumDeclarations to config for type generator access
+      config.enumDeclarations = enumDeclarations
     } else {
       // Create database connection for non-Prisma origins
       db = createDatabaseConnection(config)

@@ -111,9 +111,10 @@ export function extractPrismaColumnDescriptions(
     // Determine if field is optional
     const isOptional = field.optional === true
 
-    // Handle enum types
+    // Handle enum types for both models and views
     let enumOptions: string[] | undefined
     const fieldType = String(field.fieldType)
+
     if (enumDeclarations[fieldType]) {
       enumOptions = enumDeclarations[fieldType]
     }
