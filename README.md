@@ -5,11 +5,13 @@ Converts Prisma/MySQL/PostgreSQL/SQLite schemas to Zod schemas, TypeScript inter
 ## Features
 
 - Generates Zod schemas, Typescript interfaces or Kysely type definitions for MySQL, PostgreSQL, SQLite, and Prisma schemas
+- **NEW: Database Views Support** - Extract and generate types for database views (read-only)
 - Supports camelCase conversion
 - Handles nullable, default, auto-increment and enum fields
 - Supports custom type overrides via configuration or database comments
 - Intelligently handles field nullability based on operation type (table, insertable, updateable, selectable)
 - All fields in updateable schemas are automatically made optional
+- Views are treated as read-only entities (no insertable/updateable schemas generated)
 
 ## Installation
 
@@ -278,7 +280,103 @@ await generate({
 
 This will generate all three types of output files for each table in your database, placing them in separate folders with appropriate suffixes.
 
+### Database Views Example
+
+```typescript
+import { generate } from 'mutano'
+
+await generate({
+  origin: {
+    type: 'mysql',
+    host: '127.0.0.1',
+    port: 3306,
+    user: 'root',
+    password: 'secret',
+    database: 'myapp'
+  },
+  destinations: [{
+    type: 'zod',
+    folder: './generated/schemas',
+    suffix: 'schema'
+  }],
+  includeViews: true, // Enable views processing
+  views: ['user_profile_view', 'order_summary_view'], // Optional: specify which views to include
+  ignoreViews: ['temp_view'] // Optional: specify which views to ignore
+})
+```
+
+**Database Views Features:**
+- **Read-only**: Views generate only selectable schemas (no insertable/updateable)
+- **All database types**: Supports MySQL, PostgreSQL, SQLite, and Prisma views
+- **Filtering**: Use `views` and `ignoreViews` options to control which views are processed
+- **Type safety**: Full TypeScript/Zod/Kysely type generation for view columns
+- **Prisma integration**: Automatically detects `view` blocks in Prisma schema files
+
+### Prisma Views Integration
+
+Mutano automatically detects and processes `view` blocks in your Prisma schema:
+
+```prisma
+// schema.prisma
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
+}
+
+model User {
+  id      Int      @id @default(autoincrement())
+  email   String   @unique
+  name    String?
+  profile Profile?
+}
+
+model Profile {
+  id     Int    @id @default(autoincrement())
+  bio    String
+  user   User   @relation(fields: [userId], references: [id])
+  userId Int    @unique
+}
+
+// This view will be automatically processed by Mutano
+view UserInfo {
+  id    Int
+  email String
+  name  String?
+  bio   String?
+}
+```
+
+```typescript
+// Generate types from Prisma schema with views
+await generate({
+  origin: {
+    type: 'prisma',
+    path: './schema.prisma'
+  },
+  destinations: [{
+    type: 'zod',
+    useDateType: true
+  }],
+  includeViews: true
+})
+```
+
 The generator will create `user.type.ts`, `user.schema.ts`, and `user.db.ts` files with the following contents:
+
+### Database View Output Examples
+
+For a database view like:
+```sql
+CREATE VIEW user_profile_view AS
+SELECT
+  u.id,
+  u.name,
+  u.email,
+  p.bio,
+  p.avatar_url
+FROM users u
+LEFT JOIN profiles p ON u.id = p.user_id;
+```
 
 ### Zod Schema Output Example with Custom Header
 
@@ -415,6 +513,56 @@ export type NewUser = Insertable<UserTable>;
 export type UserUpdate = Updateable<UserTable>;
 ```
 
+### View Output Examples
+
+#### Zod Schema for Views (Read-only)
+
+```typescript
+import { z } from 'zod';
+
+// View schema (read-only)
+export const user_profile_view = z.object({
+  id: z.number().nonnegative(),
+  name: z.string(),
+  email: z.string(),
+  bio: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+})
+
+export type UserProfileViewType = z.infer<typeof user_profile_view>
+```
+
+#### TypeScript Interface for Views (Read-only)
+
+```typescript
+// TypeScript interface for user_profile_view (view - read-only)
+export interface UserProfileView {
+  id: number;
+  name: string;
+  email: string;
+  bio: string | null;
+  avatar_url: string | null;
+}
+```
+
+#### Kysely Type Definitions for Views (Read-only)
+
+```typescript
+// Kysely type definitions for user_profile_view (view)
+
+// This interface defines the structure of the 'user_profile_view' view (read-only)
+export interface UserProfileView {
+  id: number;
+  name: string;
+  email: string;
+  bio: string | null;
+  avatar_url: string | null;
+}
+
+// Helper types for user_profile_view (view - read-only)
+export type SelectableUserProfileView = Selectable<UserProfileView>;
+```
+
 ## Config
 
 ```json
@@ -490,7 +638,10 @@ export type UserUpdate = Updateable<UserTable>;
     }
   ],
   "tables": ["user", "log"],
+  "views": ["user_profile_view", "order_summary"],
   "ignore": ["log", "/^temp/"],
+  "ignoreViews": ["temp_view", "/^debug_/"],
+  "includeViews": true,
   "camelCase": false,
   "silent": false,
   "dryRun": false,
@@ -515,7 +666,10 @@ export type UserUpdate = Updateable<UserTable>;
 | destinations[].suffix | Suffix to the name of a generated file (eg: `user.table.ts`) |
 | destinations[].outFile | (Kysely only) Specify the output file for the generated content. All tables will be written to this file |
 | tables | Filter the tables to include only those specified |
+| views | Filter the views to include only those specified (requires `includeViews: true`) |
 | ignore | Filter the tables to exclude those specified. If a table name begins and ends with "/", it will be processed as a regular expression |
+| ignoreViews | Filter the views to exclude those specified. If a view name begins and ends with "/", it will be processed as a regular expression |
+| includeViews | When true, database views will be processed and included in the output. Views are read-only (no insertable/updateable schemas) |
 | camelCase | Convert all table names and their properties to camelcase. (eg: `profile_picture` becomes `profilePicture`) |
 | silent | Don't log anything to the console |
 | dryRun | When true, doesn't write files to disk but returns an object with filenames as keys and generated content as values |
@@ -682,4 +836,37 @@ export interface Product {
   id: number;
   variants: Array<{ id: string; price: number; stock: number }>;
 }
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+npm test
+```
+
+The tests include:
+- **SQLite database integration tests** - Full database setup and schema generation
+- **PostgreSQL integration tests** - Using PGlite (embedded PostgreSQL) for testing
+- **Type generation validation** - Ensures correct TypeScript/Zod/Kysely output
+- **Database views testing** - Validates view extraction and type generation
+- **Magic comments functionality** - Tests @zod, @ts, and @kysely comment overrides
+- **Enum handling** - Tests enum type generation across all databases
+- **BigInt support** - Validates large integer type handling
+- **JSON field processing** - Tests JSON/JSONB type generation for all databases
+
+### PostgreSQL Testing with PGlite
+
+The test suite uses [PGlite](https://github.com/electric-sql/pglite) for PostgreSQL testing, which provides an embedded PostgreSQL instance that doesn't require a separate database server. This allows for:
+
+- **Comprehensive PostgreSQL testing** without external dependencies
+- **PostgreSQL-specific features** like JSONB, arrays, enums, and UUID types
+- **Schema extraction validation** using real PostgreSQL information_schema queries
+- **Views testing** with actual PostgreSQL view creation and querying
+
+Run PostgreSQL-specific tests:
+
+```bash
+npm test src/tests/postgres.test.ts
 ```

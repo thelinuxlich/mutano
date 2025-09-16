@@ -5,6 +5,7 @@ import path from 'node:path'
 
 const enumDeclarations: Record<string, string[]> = {}
 import {
+  type Attribute,
   type Enumerator,
   type Field,
   type Model,
@@ -209,6 +210,35 @@ export function getType(
   const type = schemaType === 'mysql' ? Type.split('(')[0].split(' ')[0] : Type
 
   if (isTsDestination || isKyselyDestination) {
+    // Check for JSON types first for Kysely (includes json, jsonb)
+    const isJsonType = type.toLowerCase().includes('json')
+    if (isKyselyDestination && isJsonType) {
+      // Check for magic comments first
+      if (config.magicComments) {
+        const kyselyOverrideType = extractKyselyExpression(Comment)
+        if (kyselyOverrideType) {
+          const shouldBeNullable =
+            isNull ||
+            (['insertable', 'updateable'].includes(op) &&
+              (hasDefaultValue || isGenerated)) ||
+            (op === 'updateable' && !isNull && !hasDefaultValue)
+          return shouldBeNullable
+            ? kyselyOverrideType.includes('| null')
+              ? kyselyOverrideType
+              : `${kyselyOverrideType} | null`
+            : kyselyOverrideType
+        }
+      }
+
+      // Default JSON handling
+      const shouldBeNullable =
+        isNull ||
+        (['insertable', 'updateable'].includes(op) &&
+          (hasDefaultValue || isGenerated)) ||
+        (op === 'updateable' && !isNull && !hasDefaultValue)
+      return shouldBeNullable ? 'Json | null' : 'Json'
+    }
+
     if (isKyselyDestination && config.magicComments) {
       const kyselyOverrideType = extractKyselyExpression(Comment)
       if (kyselyOverrideType) {
@@ -481,6 +511,106 @@ export interface GenerateContentParams {
   isCamelCase: boolean
   enumDeclarations: Record<string, string[]>
   defaultZodHeader: (version: 3 | 4) => string
+}
+
+export interface GenerateViewContentParams {
+  view: string
+  describes: Desc[]
+  config: Config
+  destination: Destination
+  isCamelCase: boolean
+  enumDeclarations: Record<string, string[]>
+  defaultZodHeader: (version: 3 | 4) => string
+}
+
+export function generateViewContent({
+  view,
+  describes,
+  config,
+  destination,
+  isCamelCase,
+  enumDeclarations,
+  defaultZodHeader,
+}: GenerateViewContentParams): string {
+  let content = ''
+  const schemaType = config.origin.type
+
+  if (destination.type === 'kysely') {
+    // For Kysely views, we only generate the view interface (read-only)
+    content += `// Kysely type definitions for ${view} (view)\n`
+    content += `\n// This interface defines the structure of the '${view}' view (read-only)
+export interface ${camelCase(view, { pascalCase: true })}View {`
+    for (const desc of describes) {
+      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
+      const type = getType('selectable', desc, config, destination, view)
+
+      if (type) {
+        content = `${content}
+  ${field}: ${type};`
+      }
+    }
+    content = `${content}
+}
+
+// Helper types for ${view} (view - read-only)
+export type Selectable${camelCase(view, { pascalCase: true })}View = Selectable<${camelCase(view, { pascalCase: true })}View>;
+`
+  } else if (destination.type === 'ts') {
+    const modelType = destination.modelType || 'interface'
+    const isInterface = modelType === 'interface'
+    const header = destination.header
+
+    content = header ? `${header}\n\n` : ''
+    content += `// TypeScript ${isInterface ? 'interface' : 'type'} for ${view} (view - read-only)`
+
+    if (enumDeclarations[view] && enumDeclarations[view].length > 0) {
+      content += '\n\n// Enum declarations'
+      for (const enumDecl of enumDeclarations[view]) {
+        content += `\n${enumDecl}`
+      }
+      content += '\n'
+    }
+
+    if (isInterface) {
+      content += `\nexport interface ${camelCase(view, { pascalCase: true })}View {`
+    } else {
+      content += `\nexport type ${camelCase(view, { pascalCase: true })}View = {`
+    }
+    for (const desc of describes) {
+      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
+      const type = getType('selectable', desc, config, destination, view)
+      if (type) {
+        content = `${content}
+  ${field}: ${type};`
+      }
+    }
+    content = `${content}
+}
+`
+  } else if (destination.type === 'zod') {
+    const header = destination.header
+
+    content = header ? header + "\n\n" : defaultZodHeader(destination.version || 3)
+    content += `// View schema (read-only)
+export const ${view}_view = z.object({`
+    for (const desc of describes) {
+      const field = isCamelCase ? camelCase(desc.Field) : desc.Field
+      const type = getType('selectable', desc, config, destination, view)
+      if (type) {
+        content = `${content}
+  ${field}: ${type},`
+      }
+    }
+    content = `${content}
+})
+
+export type ${camelCase(`${view}ViewType`, {
+      pascalCase: true,
+    })} = z.infer<typeof ${view}_view>
+`
+  }
+
+  return content
 }
 
 export function generateContent({
@@ -760,7 +890,9 @@ export async function generate(
   config: Config,
 ): Promise<Record<string, string>> {
   let tables: string[] = []
+  let views: string[] = []
   let prismaTables: (Model | null)[] = []
+  let prismaViews: any[] = []
   let schema: ReturnType<typeof createPrismaSchemaBuilder> | null = null
   let db: ReturnType<typeof knex> | null = null
 
@@ -816,12 +948,23 @@ export async function generate(
     schema = createPrismaSchemaBuilder(schemaContents)
     prismaTables = schema.findAllByType('model', {})
     tables = prismaTables.filter((t) => t !== null).map((table) => table.name)
+
+    // Extract views from Prisma schema
+    prismaViews = schema.findAllByType('view', {})
+    views = prismaViews.filter((v) => v !== null).map((view) => view.name)
   } else if (config.origin.type === 'mysql' && db) {
     const t: { table_name: string }[][] = await db.raw(
-      'SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ?',
-      [config.origin.database],
+      'SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = ?',
+      [config.origin.database, 'BASE TABLE'],
     )
     tables = t[0].map((row) => row.table_name).sort()
+
+    // Extract views from MySQL
+    const v: { table_name: string }[][] = await db.raw(
+      'SELECT table_name as table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = ?',
+      [config.origin.database, 'VIEW'],
+    )
+    views = v[0].map((row) => row.table_name).sort()
   } else if (config.origin.type === 'postgres' && db) {
     const schema = config.origin.schema || 'public'
     const t = await db.raw(
@@ -829,14 +972,28 @@ export async function generate(
       [schema, 'BASE TABLE'],
     )
     tables = t.rows.map((row: { table_name: string }) => row.table_name).sort()
+
+    // Extract views from PostgreSQL
+    const v = await db.raw(
+      'SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = ?',
+      [schema, 'VIEW'],
+    )
+    views = v.rows.map((row: { table_name: string }) => row.table_name).sort()
   } else if (config.origin.type === 'sqlite' && db) {
     const t = await db.raw(
       "SELECT name as table_name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
     )
     tables = t.map((row: { table_name: string }) => row.table_name).sort()
+
+    // Extract views from SQLite
+    const v = await db.raw(
+      "SELECT name as table_name FROM sqlite_master WHERE type = 'view'",
+    )
+    views = v.map((row: { table_name: string }) => row.table_name).sort()
   }
   const dests: string[] = []
 
+  // Filter tables
   const includedTables = config.tables
   if (includedTables?.length)
     tables = tables.filter((table) => includedTables.includes(table))
@@ -862,9 +1019,47 @@ export async function generate(
     })
   }
 
+  // Filter views (only include if explicitly enabled)
+  if (!config.includeViews) {
+    views = []
+  } else {
+    const includedViews = config.views
+    if (includedViews?.length)
+      views = views.filter((view) => includedViews.includes(view))
+
+    const allIgnoredViews = config.ignoreViews
+    const ignoredViewsRegex = allIgnoredViews?.filter((ignoreString) => {
+      return ignoreString.startsWith('/') && ignoreString.endsWith('/')
+    })
+    const ignoredViewNames = allIgnoredViews?.filter(
+      (view) => !ignoredViewsRegex?.includes(view),
+    )
+    if (ignoredViewNames?.length)
+      views = views.filter((view) => !ignoredViewNames.includes(view))
+
+    if (ignoredViewsRegex?.length) {
+      views = views.filter((view) => {
+        let useView = true
+        for (const text of ignoredViewsRegex) {
+          const pattern = text.substring(1, text.length - 1)
+          if (view.match(pattern) !== null) useView = false
+        }
+        return useView
+      })
+    }
+  }
+
   let describes: Desc[] = []
 
-  for (let table of tables.sort((a, b) => a.localeCompare(b))) {
+  // Combine tables and views for processing
+  const allEntities = [
+    ...tables.map(name => ({ name, type: 'table' as const })),
+    ...views.map(name => ({ name, type: 'view' as const }))
+  ].sort((a, b) => a.name.localeCompare(b.name))
+
+  for (let entity of allEntities) {
+    const { name: entityName, type: entityType } = entity
+    let table = entityName // Keep the variable name for compatibility
     if (config.origin.type === 'mysql' && db) {
       const d = await db.raw(`SHOW FULL COLUMNS FROM ${table}`)
       describes = d[0] as Desc[]
@@ -979,14 +1174,25 @@ export async function generate(
         },
       )
     } else {
-      const prismaTable = prismaTables.find((t) => t?.name === table) as Model
+      // Handle Prisma tables and views
       let enumOptions: string[] | undefined
-      describes = prismaTable.properties
+      let rawProperties: any[] = []
+
+      if (entityType === 'table') {
+        const prismaTable = prismaTables.find((t) => t?.name === table) as Model
+        rawProperties = prismaTable?.properties || []
+      } else {
+        // Handle Prisma views
+        const prismaView = prismaViews.find((v) => v?.name === table)
+        rawProperties = prismaView?.properties || []
+      }
+
+      describes = rawProperties
         .filter(
           (p): p is Field =>
             p.type === 'field' &&
             p.array !== true &&
-            !p.attributes?.find((a) => a.name === 'relation'),
+            !p.attributes?.find((a: Attribute) => a.name === 'relation'),
         )
         .map((field) => {
           let defaultGenerated = false
@@ -1047,15 +1253,25 @@ export async function generate(
     )
 
     for (const destination of nonKyselyDestinations) {
-      const content = generateContent({
-        table,
-        describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
-        config,
-        destination,
-        isCamelCase: isCamelCase === true,
-        enumDeclarations,
-        defaultZodHeader,
-      })
+      const content = entityType === 'view'
+        ? generateViewContent({
+            view: table,
+            describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
+            config,
+            destination,
+            isCamelCase: isCamelCase === true,
+            enumDeclarations,
+            defaultZodHeader,
+          })
+        : generateContent({
+            table,
+            describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
+            config,
+            destination,
+            isCamelCase: isCamelCase === true,
+            enumDeclarations,
+            defaultZodHeader,
+          })
 
       const suffix = destination.suffix || ''
       const folder = destination.folder || '.'
@@ -1075,15 +1291,25 @@ export async function generate(
     }
 
     for (const destination of kyselyDestinations) {
-      const content = generateContent({
-        table,
-        describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
-        config,
-        destination,
-        isCamelCase: isCamelCase === true,
-        enumDeclarations,
-        defaultZodHeader,
-      })
+      const content = entityType === 'view'
+        ? generateViewContent({
+            view: table,
+            describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
+            config,
+            destination,
+            isCamelCase: isCamelCase === true,
+            enumDeclarations,
+            defaultZodHeader,
+          })
+        : generateContent({
+            table,
+            describes: describes.sort((a, b) => a.Field.localeCompare(b.Field)),
+            config,
+            destination,
+            isCamelCase: isCamelCase === true,
+            enumDeclarations,
+            defaultZodHeader,
+          })
 
       const outFile = destination.outFile || 'db.ts'
       if (!kyselyTableContents[outFile]) {
@@ -1144,10 +1370,11 @@ export type BigInt = ColumnType<string, number | string, number | string>
     consolidatedContent += `\n// Database Interface\nexport interface ${schemaName} {\n`
 
     const sortedTableEntries = tableContents
-      .map(({ table }) => {
-        const pascalTable = camelCase(table, { pascalCase: true })
+      .map(({ table, content }) => {
+        const isView = content.includes('(view')
+        const pascalTable = camelCase(table, { pascalCase: true }) + (isView ? 'View' : '')
         const tableKey = isCamelCase ? camelCase(table) : table
-        return { tableKey, pascalTable }
+        return { tableKey, pascalTable, isView }
       })
       .sort((a, b) => a.tableKey.localeCompare(b.tableKey))
 
@@ -1360,9 +1587,12 @@ export interface Config {
       }
   destinations: Destination[]
   tables?: string[]
+  views?: string[]
   ignore?: string[]
+  ignoreViews?: string[]
   camelCase?: boolean
   silent?: boolean
   dryRun?: boolean
   magicComments?: boolean
+  includeViews?: boolean
 }
