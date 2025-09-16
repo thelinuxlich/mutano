@@ -52,15 +52,6 @@ await generate({
 })
 ```
 
-## Database Support
-
-| Database | Connection | Views | Magic Comments |
-|----------|------------|-------|----------------|
-| **MySQL** | Host/Port | ✅ | ✅ |
-| **PostgreSQL** | Host/Port | ✅ | ✅ |
-| **SQLite** | File Path | ✅ | ❌ |
-| **Prisma** | Schema File | ✅ | ❌ (Not an output format) |
-
 ## Output Examples
 
 **Zod Schema:**
@@ -178,7 +169,7 @@ export type UserUpdate = Updateable<UserTable>;
 | `includeViews` | Process database views |
 | `camelCase` | Convert to camelCase |
 | `dryRun` | Return content without writing files |
-| `magicComments` | Enable @zod/@ts/@kysely comments |
+| `magicComments` | Enable @zod/@ts/@kysely comments (Obs.: no SQLite support) |
 
 ## Magic Comments
 
