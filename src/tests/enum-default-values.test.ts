@@ -60,8 +60,8 @@ model Post {
     // Updateable should be optional (can be updated or not) - snake_case naming
     expect(postContent).toMatch(/updateable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
 
-    // Selectable should also have defaults (new behavior) - snake_case naming
-    expect(postContent).toMatch(/selectable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
+    // Selectable should NOT have defaults - when selecting from DB, you always get a value
+    expect(postContent).toMatch(/selectable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)/)
   })
 
   test('should handle nullable enum with default value', async () => {

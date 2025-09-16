@@ -56,9 +56,9 @@ model User {
     expect(userContent).toMatch(/insertable_user[^}]+email:\s*z\.string\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
     expect(userContent).toMatch(/insertable_user[^}]+bio:\s*z\.string\(\)\.nullable\(\)\.default\('No bio provided'\)/)
 
-    // Selectable should also have defaults for fields with @default (snake_case naming)
-    expect(userContent).toMatch(/selectable_user[^}]+name:\s*z\.string\(\)\.default\('Anonymous'\)/)
-    expect(userContent).toMatch(/selectable_user[^}]+bio:\s*z\.string\(\)\.nullable\(\)\.default\('No bio provided'\)/)
+    // Selectable should NOT have defaults - when selecting from DB, you always get a value
+    expect(userContent).toMatch(/selectable_user[^}]+name:\s*z\.string\(\)/)
+    expect(userContent).toMatch(/selectable_user[^}]+bio:\s*z\.string\(\)\.nullable\(\)/)
   })
 
   test('should handle number default values correctly', async () => {
@@ -115,10 +115,10 @@ model Product {
     expect(productContent).toMatch(/insertable_product[^}]+rating:\s*z\.number\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
     expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.number\(\)\.nullable\(\)\.default\(0\)/)
 
-    // Selectable should also have defaults for fields with @default (snake_case naming)
-    expect(productContent).toMatch(/selectable_product[^}]+price:\s*z\.number\(\)\.default\(0\.0\)/)
-    expect(productContent).toMatch(/selectable_product[^}]+quantity:\s*z\.number\(\)\.default\(1\)/)
-    expect(productContent).toMatch(/selectable_product[^}]+discount:\s*z\.number\(\)\.nullable\(\)\.default\(0\)/)
+    // Selectable should NOT have defaults - when selecting from DB, you always get a value
+    expect(productContent).toMatch(/selectable_product[^}]+price:\s*z\.number\(\)/)
+    expect(productContent).toMatch(/selectable_product[^}]+quantity:\s*z\.number\(\)/)
+    expect(productContent).toMatch(/selectable_product[^}]+discount:\s*z\.number\(\)\.nullable\(\)/)
   })
 
   test('should handle boolean default values correctly', async () => {
@@ -175,10 +175,10 @@ model Settings {
     expect(settingsContent).toMatch(/insertable_settings[^}]+notifications:\s*z\.boolean\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
     expect(settingsContent).toMatch(/insertable_settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)\.default\(true\)/)
 
-    // Selectable should also have defaults for fields with @default (snake_case naming)
-    expect(settingsContent).toMatch(/selectable_settings[^}]+isActive:\s*z\.boolean\(\)\.default\(true\)/)
-    expect(settingsContent).toMatch(/selectable_settings[^}]+isPublic:\s*z\.boolean\(\)\.default\(false\)/)
-    expect(settingsContent).toMatch(/selectable_settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)\.default\(true\)/)
+    // Selectable should NOT have defaults - when selecting from DB, you always get a value
+    expect(settingsContent).toMatch(/selectable_settings[^}]+isActive:\s*z\.boolean\(\)/)
+    expect(settingsContent).toMatch(/selectable_settings[^}]+isPublic:\s*z\.boolean\(\)/)
+    expect(settingsContent).toMatch(/selectable_settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)/)
   })
 
   test('should handle DateTime default values correctly', async () => {

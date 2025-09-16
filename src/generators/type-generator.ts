@@ -130,7 +130,9 @@ export function getType(
       }
 
       // Apply default value if field has explicit default (not auto-generated)
-      if ((op === 'table' || op === 'insertable' || op === 'selectable') &&
+      // Note: selectable schemas should NOT have .default() because when selecting from DB,
+      // you always get a value (either user-provided or DB default)
+      if ((op === 'table' || op === 'insertable') &&
           hasDefaultValue && Default !== null && !isGenerated) {
         // Format default value appropriately
         let defaultValueFormatted = Default
@@ -207,8 +209,10 @@ export function getType(
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(',')}])`
         const nullishOption = (destination as any).nullish
 
-        // Handle default values for main, insertable, and selectable schemas
-        if ((op === 'table' || op === 'insertable' || op === 'selectable') && hasDefaultValue && Default !== null && !isGenerated) {
+        // Handle default values for main and insertable schemas (NOT selectable)
+        // Note: selectable schemas should NOT have .default() because when selecting from DB,
+        // you always get a value (either user-provided or DB default)
+        if ((op === 'table' || op === 'insertable') && hasDefaultValue && Default !== null && !isGenerated) {
           // Field has an explicit default value (not auto-generated)
           if (shouldBeNullable) {
             const nullableMethod = nullishOption ? 'nullish' : 'nullable'
@@ -345,8 +349,10 @@ function generateStandardType(
 
   // Apply nullability and optionality
   if (isZodDestination) {
-    // Handle default values for main, insertable, and selectable schemas (non-enum fields)
-    if ((op === 'table' || op === 'insertable' || op === 'selectable') && hasDefaultValue && Default !== null && !isGenerated) {
+    // Handle default values for main and insertable schemas (NOT selectable)
+    // Note: selectable schemas should NOT have .default() because when selecting from DB,
+    // you always get a value (either user-provided or DB default)
+    if ((op === 'table' || op === 'insertable') && hasDefaultValue && Default !== null && !isGenerated) {
       // Field has an explicit default value (not auto-generated)
       // For non-enum types, we need to format the default value appropriately
       let defaultValueFormatted = Default

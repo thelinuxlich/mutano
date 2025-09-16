@@ -252,7 +252,7 @@ function getType(op, desc, config, destination) {
           finalType = `${zodOverrideType}.${nullableMethod}()`;
         }
       }
-      if ((op === "table" || op === "insertable" || op === "selectable") && hasDefaultValue && Default !== null && !isGenerated) {
+      if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
         let defaultValueFormatted = Default;
         if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
           defaultValueFormatted = `'${Default}'`;
@@ -301,7 +301,7 @@ function getType(op, desc, config, destination) {
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
         const nullishOption = destination.nullish;
-        if ((op === "table" || op === "insertable" || op === "selectable") && hasDefaultValue && Default !== null && !isGenerated) {
+        if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
           if (shouldBeNullable) {
             const nullableMethod = nullishOption ? "nullish" : "nullable";
             return `${enumString}.${nullableMethod}().default('${Default}')`;
@@ -403,7 +403,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     baseType = isZodDestination ? "z.string()" : "string";
   }
   if (isZodDestination) {
-    if ((op === "table" || op === "insertable" || op === "selectable") && hasDefaultValue && Default !== null && !isGenerated) {
+    if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
       let defaultValueFormatted = Default;
       if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
         defaultValueFormatted = `'${Default}'`;
