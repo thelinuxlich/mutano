@@ -938,9 +938,9 @@ async function generate(config) {
           enumDeclarations,
           defaultZodHeader
         });
-        const suffix = destination.suffix || destination.type;
+        const suffix = destination.suffix === void 0 ? destination.type : destination.suffix;
         const folder = destination.folder || ".";
-        const fileName = `${entityName}.${suffix}.ts`;
+        const fileName = `${entityName}${suffix ? `.${suffix}` : ""}.ts`;
         const filePath = path.join(folder, fileName);
         results[filePath] = (destination.header || "") + content;
       }

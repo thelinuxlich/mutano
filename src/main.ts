@@ -133,9 +133,9 @@ export async function generate(config: Config): Promise<Record<string, string>> 
             })
 
         // Determine output file path
-        const suffix = destination.suffix || destination.type
+        const suffix = destination.suffix === undefined ? destination.type : destination.suffix
         const folder = destination.folder || '.'
-        const fileName = `${entityName}.${suffix}.ts`
+        const fileName = `${entityName}${suffix ? `.${suffix}`: ''}.ts`
         const filePath = path.join(folder, fileName)
 
         results[filePath] = (destination.header || '') + content
