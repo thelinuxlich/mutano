@@ -459,13 +459,13 @@ describe('mutano with SQLite', () => {
 		expect(kyselyContent).toContain('score:')
 		expect(kyselyContent).toContain('createdAt:')
 		expect(kyselyContent).toContain(
-			'export type TestTable = Selectable<TestTableTable>;',
+			'export type SelectableTestTable = Selectable<TestTableTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type NewTestTable = Insertable<TestTableTable>;',
+			'export type InsertableTestTable = Insertable<TestTableTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type TestTableUpdate = Updateable<TestTableTable>;',
+			'export type UpdateableTestTable = Updateable<TestTableTable>;',
 		)
 	})
 })

@@ -557,11 +557,11 @@ function generateKyselyContent({
   content += "}\n\n";
   content += `// Use these types for inserting, selecting and updating the table
 `;
-  content += `export type ${pascalTable} = Selectable<${pascalTable}Table>;
+  content += `export type Selectable${pascalTable} = Selectable<${pascalTable}Table>;
 `;
-  content += `export type New${pascalTable} = Insertable<${pascalTable}Table>;
+  content += `export type Insertable${pascalTable} = Insertable<${pascalTable}Table>;
 `;
-  content += `export type ${pascalTable}Update = Updateable<${pascalTable}Table>;
+  content += `export type Updateable${pascalTable} = Updateable<${pascalTable}Table>;
 `;
   return content;
 }

@@ -299,13 +299,13 @@ describe('mutano', () => {
 			expect(content).toContain('name:')
 			expect(content).toContain('metadata: Json | null;')
 			expect(content).toContain(
-				'export type User = Selectable<UserTable>;',
+				'export type SelectableUser = Selectable<UserTable>;',
 			)
 			expect(content).toContain(
-				'export type NewUser = Insertable<UserTable>;',
+				'export type InsertableUser = Insertable<UserTable>;',
 			)
 			expect(content).toContain(
-				'export type UserUpdate = Updateable<UserTable>;',
+				'export type UpdateableUser = Updateable<UserTable>;',
 			)
 		})
 	})

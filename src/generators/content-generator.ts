@@ -225,9 +225,9 @@ function generateKyselyContent({
 
   // Generate helper types
   content += `// Use these types for inserting, selecting and updating the table\n`
-  content += `export type ${pascalTable} = Selectable<${pascalTable}Table>;\n`
-  content += `export type New${pascalTable} = Insertable<${pascalTable}Table>;\n`
-  content += `export type ${pascalTable}Update = Updateable<${pascalTable}Table>;\n`
+  content += `export type Selectable${pascalTable} = Selectable<${pascalTable}Table>;\n`
+  content += `export type Insertable${pascalTable} = Insertable<${pascalTable}Table>;\n`
+  content += `export type Updateable${pascalTable} = Updateable<${pascalTable}Table>;\n`
 
   return content
 }
