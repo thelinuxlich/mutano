@@ -54,14 +54,14 @@ model Post {
     // Main schema should have required enum
     expect(postContent).toContain("status: z.enum(['DRAFT','PUBLISHED','ARCHIVED'])")
     
-    // Insertable should be optional (not nullable) due to default value
-    expect(postContent).toMatch(/insertable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
-    
+    // Insertable should have default value (not just optional) due to @default(DRAFT)
+    expect(postContent).toMatch(/insertable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
+
     // Updateable should be optional (can be updated or not)
     expect(postContent).toMatch(/updateable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
-    
+
     // Selectable should be required (always has a value due to default)
-    expect(postContent).toMatch(/selectable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)(?!\.(optional|nullable|nullish))/)
+    expect(postContent).toMatch(/selectable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)(?!\.(optional|nullable|nullish|default))/)
   })
 
   test('should handle nullable enum with default value', async () => {
@@ -233,8 +233,8 @@ model Item {
     expect(itemContent).toContain("category: z.enum(['ACTIVE','INACTIVE']).nullish()") // Nullable
     
     // Insertable validations
-    expect(itemContent).toMatch(/insertable_Item[^}]+status:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.optional\(\)/)  // Optional due to default
-    expect(itemContent).toMatch(/insertable_Item[^}]+priority:\s*z\.enum\(\['LOW','HIGH'\]\)(?!\.(optional|nullable|nullish))/)  // Required (no default)
+    expect(itemContent).toMatch(/insertable_Item[^}]+status:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.default\('ACTIVE'\)/)  // Default value due to @default(ACTIVE)
+    expect(itemContent).toMatch(/insertable_Item[^}]+priority:\s*z\.enum\(\['LOW','HIGH'\]\)(?!\.(optional|nullable|nullish|default))/)  // Required (no default)
     expect(itemContent).toMatch(/insertable_Item[^}]+category:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.nullish\(\)/)  // Nullish (nullable)
   })
 
@@ -286,8 +286,8 @@ model Record {
     // Main schema should have required enum
     expect(recordContent).toContain("type: z.enum(['SYSTEM','USER'])")
     
-    // Insertable should have optional id (auto-generated) and optional type (has default)
-    expect(recordContent).toMatch(/insertable_Record[^}]+id:\s*z\.number\(\)\.optional\(\)/)
-    expect(recordContent).toMatch(/insertable_Record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.optional\(\)/)
+    // Insertable should have optional id (auto-generated) and default type (has @default(USER))
+    expect(recordContent).toMatch(/insertable_Record[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/)
+    expect(recordContent).toMatch(/insertable_Record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.default\('USER'\)/)
   })
 })

@@ -282,6 +282,14 @@ function getType(op, desc, config, destination) {
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
         const nullishOption = destination.nullish;
+        if (op === "insertable" && hasDefaultValue && Default !== null && !isGenerated) {
+          if (shouldBeNullable) {
+            const nullableMethod = nullishOption ? "nullish" : "nullable";
+            return `${enumString}.${nullableMethod}().default('${Default}')`;
+          } else {
+            return `${enumString}.default('${Default}')`;
+          }
+        }
         if (shouldBeNullable && shouldBeOptional) {
           const nullableMethod = nullishOption ? "nullish" : "nullable";
           return `${enumString}.${nullableMethod}()`;
@@ -376,6 +384,25 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     baseType = isZodDestination ? "z.string()" : "string";
   }
   if (isZodDestination) {
+    if (op === "insertable" && hasDefaultValue && Default !== null && !isGenerated) {
+      let defaultValueFormatted = Default;
+      if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
+        defaultValueFormatted = `'${Default}'`;
+      } else if (typeMappings.booleanTypes.includes(type)) {
+        defaultValueFormatted = Default.toLowerCase() === "true" ? "true" : "false";
+      } else if (typeMappings.numberTypes.includes(type)) {
+        defaultValueFormatted = Default;
+      } else {
+        defaultValueFormatted = `'${Default}'`;
+      }
+      if (shouldBeNullable) {
+        const nullishOption = destination.nullish;
+        const nullableMethod = nullishOption ? "nullish" : "nullable";
+        return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`;
+      } else {
+        return `${baseType}.default(${defaultValueFormatted})`;
+      }
+    }
     if (shouldBeNullable && shouldBeOptional) {
       const nullishOption = destination.nullish;
       const nullableMethod = nullishOption ? "nullish" : "nullable";
@@ -854,15 +881,28 @@ function extractPrismaColumnDescriptions(config, entityName, enumDeclarations) {
     let defaultValue = null;
     if (field.attributes) {
       for (const attr of field.attributes) {
-        if (attr.name === "default") {
+        if (attr.name === "updatedAt") {
+          defaultGenerated = true;
+        } else if (attr.name === "default") {
           if (attr.args && attr.args.length > 0) {
             const arg = attr.args[0];
             if (typeof arg === "object" && "value" in arg) {
-              if (arg.value === "autoincrement()" || arg.value === "cuid()" || arg.value === "uuid()") {
-                defaultGenerated = true;
+              if (typeof arg.value === "object" && arg.value.type === "function") {
+                const functionName = arg.value.name;
+                if (functionName === "autoincrement" || functionName === "cuid" || functionName === "uuid" || functionName === "now") {
+                  defaultGenerated = true;
+                }
+              } else if (typeof arg.value === "string") {
+                let cleanValue = arg.value;
+                if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
+                  cleanValue = cleanValue.slice(1, -1);
+                }
+                defaultValue = cleanValue;
               } else {
                 defaultValue = String(arg.value);
               }
+            } else if (typeof arg === "string") {
+              defaultValue = arg;
             }
           }
         }

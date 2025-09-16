@@ -228,9 +228,9 @@ model Post {
     // Should generate proper z.enum() even with default values
     expect(postContent).toContain("status: z.enum(['DRAFT','PUBLISHED','ARCHIVED'])")
     
-    // For insertable, should be optional due to default (corrected behavior)
+    // For insertable, should have default value due to @default(DRAFT)
     const insertableMatch = postContent.match(/export const insertable_Post[^}]+status: (z\.enum\([^)]+\)[^,\n]*)/s)
     expect(insertableMatch).toBeTruthy()
-    expect(insertableMatch![1]).toMatch(/z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
+    expect(insertableMatch![1]).toMatch(/z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
   })
 })

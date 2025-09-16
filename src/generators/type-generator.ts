@@ -181,6 +181,17 @@ export function getType(
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(',')}])`
         const nullishOption = (destination as any).nullish
 
+        // Handle default values for insertable schemas
+        if (op === 'insertable' && hasDefaultValue && Default !== null && !isGenerated) {
+          // Field has an explicit default value (not auto-generated)
+          if (shouldBeNullable) {
+            const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+            return `${enumString}.${nullableMethod}().default('${Default}')`
+          } else {
+            return `${enumString}.default('${Default}')`
+          }
+        }
+
         if (shouldBeNullable && shouldBeOptional) {
           // Field is both nullable and optional
           const nullableMethod = nullishOption ? 'nullish' : 'nullable'
@@ -190,7 +201,7 @@ export function getType(
           const nullableMethod = nullishOption ? 'nullish' : 'nullable'
           return `${enumString}.${nullableMethod}()`
         } else if (shouldBeOptional) {
-          // Field is optional but not nullable
+          // Field is optional but not nullable (auto-generated fields)
           return `${enumString}.optional()`
         } else {
           // Field is required and not nullable
@@ -308,6 +319,33 @@ function generateStandardType(
 
   // Apply nullability and optionality
   if (isZodDestination) {
+    // Handle default values for insertable schemas (non-enum fields)
+    if (op === 'insertable' && hasDefaultValue && Default !== null && !isGenerated) {
+      // Field has an explicit default value (not auto-generated)
+      // For non-enum types, we need to format the default value appropriately
+      let defaultValueFormatted = Default
+
+      // Handle different types of default values
+      if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
+        defaultValueFormatted = `'${Default}'`
+      } else if (typeMappings.booleanTypes.includes(type)) {
+        defaultValueFormatted = Default.toLowerCase() === 'true' ? 'true' : 'false'
+      } else if (typeMappings.numberTypes.includes(type)) {
+        defaultValueFormatted = Default
+      } else {
+        // For other types, wrap in quotes
+        defaultValueFormatted = `'${Default}'`
+      }
+
+      if (shouldBeNullable) {
+        const nullishOption = (destination as any).nullish
+        const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+        return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`
+      } else {
+        return `${baseType}.default(${defaultValueFormatted})`
+      }
+    }
+
     if (shouldBeNullable && shouldBeOptional) {
       // Field is both nullable and optional
       const nullishOption = (destination as any).nullish
@@ -319,7 +357,7 @@ function generateStandardType(
       const nullableMethod = nullishOption ? 'nullish' : 'nullable'
       return `${baseType}.${nullableMethod}()`
     } else if (shouldBeOptional) {
-      // Field is optional but not nullable
+      // Field is optional but not nullable (auto-generated fields)
       return `${baseType}.optional()`
     } else {
       // Field is required and not nullable
