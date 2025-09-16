@@ -204,7 +204,7 @@ function generateKyselyContent({
 
   content += `// Kysely type definitions for ${table}\n\n`
   content += `// This interface defines the structure of the '${table}' table\n`
-  content += `export interface ${pascalTable}Table {\n`
+  content += `export interface ${pascalTable} {\n`
 
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
@@ -225,9 +225,9 @@ function generateKyselyContent({
 
   // Generate helper types
   content += `// Use these types for inserting, selecting and updating the table\n`
-  content += `export type Selectable${pascalTable} = Selectable<${pascalTable}Table>;\n`
-  content += `export type Insertable${pascalTable} = Insertable<${pascalTable}Table>;\n`
-  content += `export type Updateable${pascalTable} = Updateable<${pascalTable}Table>;\n`
+  content += `export type Selectable${pascalTable} = Selectable<${pascalTable}>;\n`
+  content += `export type Insertable${pascalTable} = Insertable<${pascalTable}>;\n`
+  content += `export type Updateable${pascalTable} = Updateable<${pascalTable}>;\n`
 
   return content
 }
@@ -257,8 +257,6 @@ function generateZodContent({
   if (!content.includes(header)) {
     content += header
   }
-
-  // const pascalTable = camelCase(table, { pascalCase: true })
 
   // Generate main schema
   content += `export const ${table} = z.object({\n`

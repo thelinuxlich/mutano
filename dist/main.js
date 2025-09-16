@@ -544,7 +544,7 @@ function generateKyselyContent({
 `;
   content += `// This interface defines the structure of the '${table}' table
 `;
-  content += `export interface ${pascalTable}Table {
+  content += `export interface ${pascalTable} {
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -560,11 +560,11 @@ function generateKyselyContent({
   content += "}\n\n";
   content += `// Use these types for inserting, selecting and updating the table
 `;
-  content += `export type Selectable${pascalTable} = Selectable<${pascalTable}Table>;
+  content += `export type Selectable${pascalTable} = Selectable<${pascalTable}>;
 `;
-  content += `export type Insertable${pascalTable} = Insertable<${pascalTable}Table>;
+  content += `export type Insertable${pascalTable} = Insertable<${pascalTable}>;
 `;
-  content += `export type Updateable${pascalTable} = Updateable<${pascalTable}Table>;
+  content += `export type Updateable${pascalTable} = Updateable<${pascalTable}>;
 `;
   return content;
 }
