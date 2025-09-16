@@ -68,67 +68,6 @@ model User {
     expect(userContent).not.toMatch(/role:\s*z\.string\(\)/)
   })
 
-  test('should generate proper z.enum() for MySQL enums', async () => {
-    const result = await generate({
-      origin: {
-        type: 'mysql',
-        host: 'localhost',
-        port: 3306,
-        user: 'test',
-        password: 'test',
-        database: 'test'
-      },
-      destinations: [{
-        type: 'zod'
-      }],
-      dryRun: true,
-      // Mock the database connection to return enum data
-      _mockDescribes: [{
-        Field: 'status',
-        Type: "enum('active','inactive','pending')",
-        Null: 'NO',
-        Default: 'active',
-        Extra: '',
-        Comment: ''
-      }],
-      _mockTables: ['users']
-    })
-    
-    // This test would need actual MySQL connection, so we'll mock it
-    // The important thing is to test the enum parsing logic
-  })
-
-  test('should generate proper z.enum() for PostgreSQL enums', async () => {
-    const result = await generate({
-      origin: {
-        type: 'postgres',
-        host: 'localhost',
-        port: 5432,
-        user: 'test',
-        password: 'test',
-        database: 'test'
-      },
-      destinations: [{
-        type: 'zod'
-      }],
-      dryRun: true,
-      // Mock the database connection to return enum data
-      _mockDescribes: [{
-        Field: 'status',
-        Type: 'user_status',
-        Null: 'NO',
-        Default: 'active',
-        Extra: '',
-        Comment: '',
-        EnumOptions: ['active', 'inactive', 'pending']
-      }],
-      _mockTables: ['users']
-    })
-    
-    // This test would need actual PostgreSQL connection, so we'll mock it
-    // The important thing is to test the enum parsing logic
-  })
-
   test('should handle nullable Prisma enums correctly', async () => {
     const tempDir = join(tmpdir(), 'mutano-enum-nullable-test-' + Date.now())
     await mkdir(tempDir, { recursive: true })
@@ -289,9 +228,9 @@ model Post {
     // Should generate proper z.enum() even with default values
     expect(postContent).toContain("status: z.enum(['DRAFT','PUBLISHED','ARCHIVED'])")
     
-    // For insertable, should be nullable due to default (current behavior)
+    // For insertable, should be optional due to default (corrected behavior)
     const insertableMatch = postContent.match(/export const insertable_Post[^}]+status: (z\.enum\([^)]+\)[^,\n]*)/s)
     expect(insertableMatch).toBeTruthy()
-    expect(insertableMatch![1]).toMatch(/z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.nullable\(\)/)
+    expect(insertableMatch![1]).toMatch(/z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
   })
 })

@@ -169,30 +169,49 @@ export function getType(
     }
 
     if (enumValues.length > 0) {
-      const shouldBeNullable =
-        isNull ||
-        (['insertable', 'updateable'].includes(op) &&
-          (hasDefaultValue || isGenerated)) ||
-        (op === 'updateable' && !isNull && !hasDefaultValue)
+      // Determine if field should be nullable (can be null in database)
+      const shouldBeNullable = isNull
+
+      // Determine if field should be optional (can be omitted from input)
+      const shouldBeOptional =
+        (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
+        (op === 'updateable')
 
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(',')}])`
         const nullishOption = (destination as any).nullish
-        const nullableMethod = nullishOption ? 'nullish' : 'nullable'
-        return shouldBeNullable ? `${enumString}.${nullableMethod}()` : enumString
-      } else if (isTsDestination) {
-        const enumType = (destination as any).enumType
-        if (enumType === 'enum') {
-          // Generate enum declaration (this would need to be handled separately)
-          const enumString = enumValues.map((v) => `'${v}'`).join(' | ')
-          return shouldBeNullable ? `${enumString} | null` : enumString
+
+        if (shouldBeNullable && shouldBeOptional) {
+          // Field is both nullable and optional
+          const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+          return `${enumString}.${nullableMethod}()`
+        } else if (shouldBeNullable) {
+          // Field is nullable but required
+          const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+          return `${enumString}.${nullableMethod}()`
+        } else if (shouldBeOptional) {
+          // Field is optional but not nullable
+          return `${enumString}.optional()`
         } else {
-          const enumString = enumValues.map((v) => `'${v}'`).join(' | ')
-          return shouldBeNullable ? `${enumString} | null` : enumString
+          // Field is required and not nullable
+          return enumString
+        }
+      } else if (isTsDestination) {
+        const enumString = enumValues.map((v) => `'${v}'`).join(' | ')
+
+        if (shouldBeNullable) {
+          return `${enumString} | null`
+        } else {
+          return enumString
         }
       } else if (isKyselyDestination) {
         const enumString = enumValues.map((v) => `'${v}'`).join(' | ')
-        return shouldBeNullable ? `${enumString} | null` : enumString
+
+        if (shouldBeNullable) {
+          return `${enumString} | null`
+        } else {
+          return enumString
+        }
       }
     }
   }
@@ -223,11 +242,13 @@ function generateStandardType(
   const isZodDestination = destination.type === 'zod'
   const isKyselyDestination = destination.type === 'kysely'
 
-  const shouldBeNullable =
-    isNull ||
-    (['insertable', 'updateable'].includes(op) &&
-      (hasDefaultValue || isGenerated)) ||
-    (op === 'updateable' && !isNull && !hasDefaultValue)
+  // Determine if field should be nullable (can be null in database)
+  const shouldBeNullable = isNull
+
+  // Determine if field should be optional (can be omitted from input)
+  const shouldBeOptional =
+    (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
+    (op === 'updateable')
 
   let baseType: string
 
@@ -285,16 +306,31 @@ function generateStandardType(
     baseType = isZodDestination ? 'z.string()' : 'string'
   }
 
-  // Apply nullability
-  if (shouldBeNullable) {
-    if (isZodDestination) {
+  // Apply nullability and optionality
+  if (isZodDestination) {
+    if (shouldBeNullable && shouldBeOptional) {
+      // Field is both nullable and optional
       const nullishOption = (destination as any).nullish
       const nullableMethod = nullishOption ? 'nullish' : 'nullable'
       return `${baseType}.${nullableMethod}()`
+    } else if (shouldBeNullable) {
+      // Field is nullable but required
+      const nullishOption = (destination as any).nullish
+      const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+      return `${baseType}.${nullableMethod}()`
+    } else if (shouldBeOptional) {
+      // Field is optional but not nullable
+      return `${baseType}.optional()`
     } else {
+      // Field is required and not nullable
+      return baseType
+    }
+  } else {
+    // For TypeScript and Kysely, only handle nullability
+    if (shouldBeNullable) {
       return `${baseType} | null`
+    } else {
+      return baseType
     }
   }
-
-  return baseType
 }

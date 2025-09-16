@@ -277,24 +277,36 @@ function getType(op, desc, config, destination) {
       enumValues = config.enumDeclarations[type];
     }
     if (enumValues.length > 0) {
-      const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
+      const shouldBeNullable = isNull;
+      const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
         const nullishOption = destination.nullish;
-        const nullableMethod = nullishOption ? "nullish" : "nullable";
-        return shouldBeNullable ? `${enumString}.${nullableMethod}()` : enumString;
-      } else if (isTsDestination) {
-        const enumType = destination.enumType;
-        if (enumType === "enum") {
-          const enumString = enumValues.map((v) => `'${v}'`).join(" | ");
-          return shouldBeNullable ? `${enumString} | null` : enumString;
+        if (shouldBeNullable && shouldBeOptional) {
+          const nullableMethod = nullishOption ? "nullish" : "nullable";
+          return `${enumString}.${nullableMethod}()`;
+        } else if (shouldBeNullable) {
+          const nullableMethod = nullishOption ? "nullish" : "nullable";
+          return `${enumString}.${nullableMethod}()`;
+        } else if (shouldBeOptional) {
+          return `${enumString}.optional()`;
         } else {
-          const enumString = enumValues.map((v) => `'${v}'`).join(" | ");
-          return shouldBeNullable ? `${enumString} | null` : enumString;
+          return enumString;
+        }
+      } else if (isTsDestination) {
+        const enumString = enumValues.map((v) => `'${v}'`).join(" | ");
+        if (shouldBeNullable) {
+          return `${enumString} | null`;
+        } else {
+          return enumString;
         }
       } else if (isKyselyDestination) {
         const enumString = enumValues.map((v) => `'${v}'`).join(" | ");
-        return shouldBeNullable ? `${enumString} | null` : enumString;
+        if (shouldBeNullable) {
+          return `${enumString} | null`;
+        } else {
+          return enumString;
+        }
       }
     }
   }
@@ -309,7 +321,8 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   const isGenerated = Extra.toLowerCase().includes("auto_increment") || Extra.toLowerCase().includes("default_generated");
   const isZodDestination = destination.type === "zod";
   const isKyselyDestination = destination.type === "kysely";
-  const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
+  const shouldBeNullable = isNull;
+  const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
   let baseType;
   if (typeMappings.dateTypes.includes(type)) {
     if (isZodDestination) {
@@ -362,16 +375,27 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   } else {
     baseType = isZodDestination ? "z.string()" : "string";
   }
-  if (shouldBeNullable) {
-    if (isZodDestination) {
+  if (isZodDestination) {
+    if (shouldBeNullable && shouldBeOptional) {
       const nullishOption = destination.nullish;
       const nullableMethod = nullishOption ? "nullish" : "nullable";
       return `${baseType}.${nullableMethod}()`;
+    } else if (shouldBeNullable) {
+      const nullishOption = destination.nullish;
+      const nullableMethod = nullishOption ? "nullish" : "nullable";
+      return `${baseType}.${nullableMethod}()`;
+    } else if (shouldBeOptional) {
+      return `${baseType}.optional()`;
     } else {
+      return baseType;
+    }
+  } else {
+    if (shouldBeNullable) {
       return `${baseType} | null`;
+    } else {
+      return baseType;
     }
   }
-  return baseType;
 }
 
 function generateViewContent({

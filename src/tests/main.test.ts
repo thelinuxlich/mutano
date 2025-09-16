@@ -294,18 +294,18 @@ describe('mutano', () => {
 			})
 
 			expect(content).toContain('// Kysely type definitions for user')
-			expect(content).toContain('export interface UserTable {')
+			expect(content).toContain('export interface User {')
 			expect(content).toContain('id: Generated<')
 			expect(content).toContain('name:')
 			expect(content).toContain('metadata: Json | null;')
 			expect(content).toContain(
-				'export type SelectableUser = Selectable<UserTable>;',
+				'export type SelectableUser = Selectable<User>;',
 			)
 			expect(content).toContain(
-				'export type InsertableUser = Insertable<UserTable>;',
+				'export type InsertableUser = Insertable<User>;',
 			)
 			expect(content).toContain(
-				'export type UpdateableUser = Updateable<UserTable>;',
+				'export type UpdateableUser = Updateable<User>;',
 			)
 		})
 	})

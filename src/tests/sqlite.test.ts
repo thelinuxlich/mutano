@@ -452,20 +452,20 @@ describe('mutano with SQLite', () => {
 		})
 
 		expect(kyselyContent).toContain('// Kysely type definitions for test_table')
-		expect(kyselyContent).toContain('export interface TestTableTable {')
+		expect(kyselyContent).toContain('export interface TestTable {')
 		expect(kyselyContent).toContain('id:')
 		expect(kyselyContent).toContain('name:')
 		expect(kyselyContent).toContain('email:')
 		expect(kyselyContent).toContain('score:')
 		expect(kyselyContent).toContain('createdAt:')
 		expect(kyselyContent).toContain(
-			'export type SelectableTestTable = Selectable<TestTableTable>;',
+			'export type SelectableTestTable = Selectable<TestTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type InsertableTestTable = Insertable<TestTableTable>;',
+			'export type InsertableTestTable = Insertable<TestTable>;',
 		)
 		expect(kyselyContent).toContain(
-			'export type UpdateableTestTable = Updateable<TestTableTable>;',
+			'export type UpdateableTestTable = Updateable<TestTable>;',
 		)
 	})
 })
