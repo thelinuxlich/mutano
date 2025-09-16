@@ -837,36 +837,3 @@ export interface Product {
   variants: Array<{ id: string; price: number; stock: number }>;
 }
 ```
-
-## Testing
-
-Run the test suite:
-
-```bash
-npm test
-```
-
-The tests include:
-- **SQLite database integration tests** - Full database setup and schema generation
-- **PostgreSQL integration tests** - Using PGlite (embedded PostgreSQL) for testing
-- **Type generation validation** - Ensures correct TypeScript/Zod/Kysely output
-- **Database views testing** - Validates view extraction and type generation
-- **Magic comments functionality** - Tests @zod, @ts, and @kysely comment overrides
-- **Enum handling** - Tests enum type generation across all databases
-- **BigInt support** - Validates large integer type handling
-- **JSON field processing** - Tests JSON/JSONB type generation for all databases
-
-### PostgreSQL Testing with PGlite
-
-The test suite uses [PGlite](https://github.com/electric-sql/pglite) for PostgreSQL testing, which provides an embedded PostgreSQL instance that doesn't require a separate database server. This allows for:
-
-- **Comprehensive PostgreSQL testing** without external dependencies
-- **PostgreSQL-specific features** like JSONB, arrays, enums, and UUID types
-- **Schema extraction validation** using real PostgreSQL information_schema queries
-- **Views testing** with actual PostgreSQL view creation and querying
-
-Run PostgreSQL-specific tests:
-
-```bash
-npm test src/tests/postgres.test.ts
-```
