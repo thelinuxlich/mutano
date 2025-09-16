@@ -54,14 +54,14 @@ model Post {
     // Main schema should have required enum
     expect(postContent).toContain("status: z.enum(['DRAFT','PUBLISHED','ARCHIVED'])")
     
-    // Insertable should have default value (not just optional) due to @default(DRAFT)
-    expect(postContent).toMatch(/insertable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
+    // Insertable should have default value (not just optional) due to @default(DRAFT) - snake_case naming
+    expect(postContent).toMatch(/insertable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
 
-    // Updateable should be optional (can be updated or not)
-    expect(postContent).toMatch(/updateable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
+    // Updateable should be optional (can be updated or not) - snake_case naming
+    expect(postContent).toMatch(/updateable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
 
-    // Selectable should be required (always has a value due to default)
-    expect(postContent).toMatch(/selectable_Post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)(?!\.(optional|nullable|nullish|default))/)
+    // Selectable should also have defaults (new behavior) - snake_case naming
+    expect(postContent).toMatch(/selectable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
   })
 
   test('should handle nullable enum with default value', async () => {
@@ -114,8 +114,8 @@ model Task {
     // Main schema should have nullish enum (nullable field)
     expect(taskContent).toContain("priority: z.enum(['LOW','MEDIUM','HIGH']).nullish()")
     
-    // Insertable should be nullish (optional due to default, nullable due to field definition)
-    expect(taskContent).toMatch(/insertable_Task[^}]+priority:\s*z\.enum\(\['LOW','MEDIUM','HIGH'\]\)\.nullish\(\)/)
+    // Insertable should be nullish (optional due to default, nullable due to field definition) - snake_case naming
+    expect(taskContent).toMatch(/insertable_task[^}]+priority:\s*z\.enum\(\['LOW','MEDIUM','HIGH'\]\)\.nullish\(\)\.default\('MEDIUM'\)/)
   })
 
   test('should handle enum without default value - insertable should be required', async () => {
@@ -167,11 +167,11 @@ model User {
     // Main schema should have required enum
     expect(userContent).toContain("role: z.enum(['ADMIN','USER','MODERATOR'])")
     
-    // Insertable should be required (no default value)
-    expect(userContent).toMatch(/insertable_User[^}]+role:\s*z\.enum\(\['ADMIN','USER','MODERATOR'\]\)(?!\.(optional|nullable|nullish))/)
-    
-    // Updateable should be optional (can be updated or not)
-    expect(userContent).toMatch(/updateable_User[^}]+role:\s*z\.enum\(\['ADMIN','USER','MODERATOR'\]\)\.optional\(\)/)
+    // Insertable should be required (no default value) - snake_case naming
+    expect(userContent).toMatch(/insertable_user[^}]+role:\s*z\.enum\(\['ADMIN','USER','MODERATOR'\]\)(?!\.(optional|nullable|nullish))/)
+
+    // Updateable should be optional (can be updated or not) - snake_case naming
+    expect(userContent).toMatch(/updateable_user[^}]+role:\s*z\.enum\(\['ADMIN','USER','MODERATOR'\]\)\.optional\(\)/)
   })
 
   test('should handle multiple enums with different default scenarios', async () => {
@@ -232,10 +232,10 @@ model Item {
     expect(itemContent).toContain("priority: z.enum(['LOW','HIGH'])")       // Required no default
     expect(itemContent).toContain("category: z.enum(['ACTIVE','INACTIVE']).nullish()") // Nullable
     
-    // Insertable validations
-    expect(itemContent).toMatch(/insertable_Item[^}]+status:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.default\('ACTIVE'\)/)  // Default value due to @default(ACTIVE)
-    expect(itemContent).toMatch(/insertable_Item[^}]+priority:\s*z\.enum\(\['LOW','HIGH'\]\)(?!\.(optional|nullable|nullish|default))/)  // Required (no default)
-    expect(itemContent).toMatch(/insertable_Item[^}]+category:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.nullish\(\)/)  // Nullish (nullable)
+    // Insertable validations - snake_case naming
+    expect(itemContent).toMatch(/insertable_item[^}]+status:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.default\('ACTIVE'\)/)  // Default value due to @default(ACTIVE)
+    expect(itemContent).toMatch(/insertable_item[^}]+priority:\s*z\.enum\(\['LOW','HIGH'\]\)(?!\.(optional|nullable|nullish|default))/)  // Required (no default)
+    expect(itemContent).toMatch(/insertable_item[^}]+category:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.nullish\(\)/)  // Nullish (nullable)
   })
 
   test('should handle enum with autoincrement and default combination', async () => {
@@ -286,8 +286,8 @@ model Record {
     // Main schema should have required enum
     expect(recordContent).toContain("type: z.enum(['SYSTEM','USER'])")
     
-    // Insertable should have optional id (auto-generated) and default type (has @default(USER))
-    expect(recordContent).toMatch(/insertable_Record[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/)
-    expect(recordContent).toMatch(/insertable_Record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.default\('USER'\)/)
+    // Insertable should have optional id (auto-generated) and default type (has @default(USER)) - snake_case naming
+    expect(recordContent).toMatch(/insertable_record[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/)
+    expect(recordContent).toMatch(/insertable_record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.default\('USER'\)/)
   })
 })

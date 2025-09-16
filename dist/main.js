@@ -282,7 +282,7 @@ function getType(op, desc, config, destination) {
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
         const nullishOption = destination.nullish;
-        if (op === "insertable" && hasDefaultValue && Default !== null && !isGenerated) {
+        if ((op === "table" || op === "insertable" || op === "selectable") && hasDefaultValue && Default !== null && !isGenerated) {
           if (shouldBeNullable) {
             const nullableMethod = nullishOption ? "nullish" : "nullable";
             return `${enumString}.${nullableMethod}().default('${Default}')`;
@@ -384,7 +384,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     baseType = isZodDestination ? "z.string()" : "string";
   }
   if (isZodDestination) {
-    if (op === "insertable" && hasDefaultValue && Default !== null && !isGenerated) {
+    if ((op === "table" || op === "insertable" || op === "selectable") && hasDefaultValue && Default !== null && !isGenerated) {
       let defaultValueFormatted = Default;
       if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
         defaultValueFormatted = `'${Default}'`;
@@ -425,6 +425,9 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   }
 }
 
+function toSnakeCase(str) {
+  return str.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "");
+}
 function generateViewContent({
   view,
   describes,
@@ -476,7 +479,8 @@ function generateViewContent({
     }
     content += `// View schema (read-only)
 `;
-    content += `export const ${view}_view = z.object({
+    const snakeView = toSnakeCase(view);
+    content += `export const ${snakeView}_view = z.object({
 `;
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -488,7 +492,7 @@ function generateViewContent({
     const pascalView = camelCase(view, { pascalCase: true });
     content += `export type ${camelCase(`${pascalView}ViewType`, {
       pascalCase: true
-    })} = z.infer<typeof ${view}_view>
+    })} = z.infer<typeof ${snakeView}_view>
 `;
   }
   return content;
@@ -633,7 +637,8 @@ function generateZodContent({
   if (!content.includes(header)) {
     content += header;
   }
-  content += `export const ${table} = z.object({
+  const snakeTable = toSnakeCase(table);
+  content += `export const ${snakeTable} = z.object({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -642,7 +647,7 @@ function generateZodContent({
 `;
   }
   content += "})\n\n";
-  content += `export const insertable_${table} = z.object({
+  content += `export const insertable_${snakeTable} = z.object({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -651,7 +656,7 @@ function generateZodContent({
 `;
   }
   content += "})\n\n";
-  content += `export const updateable_${table} = z.object({
+  content += `export const updateable_${snakeTable} = z.object({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -660,7 +665,7 @@ function generateZodContent({
 `;
   }
   content += "})\n\n";
-  content += `export const selectable_${table} = z.object({
+  content += `export const selectable_${snakeTable} = z.object({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
@@ -669,13 +674,13 @@ function generateZodContent({
 `;
   }
   content += "})\n\n";
-  content += `export type ${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof ${table}>
+  content += `export type ${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof ${snakeTable}>
 `;
-  content += `export type Insertable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof insertable_${table}>
+  content += `export type Insertable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof insertable_${snakeTable}>
 `;
-  content += `export type Updateable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof updateable_${table}>
+  content += `export type Updateable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof updateable_${snakeTable}>
 `;
-  content += `export type Selectable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof selectable_${table}>
+  content += `export type Selectable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof selectable_${snakeTable}>
 `;
   return content;
 }

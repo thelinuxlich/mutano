@@ -46,15 +46,19 @@ model User {
     
     console.log('Generated string default content:', userContent)
     
-    // Main schema should have required strings
-    expect(userContent).toContain("name: z.string()")
-    expect(userContent).toContain("email: z.string()")
-    expect(userContent).toContain("bio: z.string().nullable()")
+    // Main schema should have defaults for fields with @default
+    expect(userContent).toContain("name: z.string().default('Anonymous')")
+    expect(userContent).toContain("email: z.string()")  // No default
+    expect(userContent).toContain("bio: z.string().nullable().default('No bio provided')")
     
-    // Insertable should have defaults for fields with @default
-    expect(userContent).toMatch(/insertable_User[^}]+name:\s*z\.string\(\)\.default\('Anonymous'\)/)
-    expect(userContent).toMatch(/insertable_User[^}]+email:\s*z\.string\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
-    expect(userContent).toMatch(/insertable_User[^}]+bio:\s*z\.string\(\)\.nullable\(\)\.default\('No bio provided'\)/)
+    // Insertable should have defaults for fields with @default (snake_case naming)
+    expect(userContent).toMatch(/insertable_user[^}]+name:\s*z\.string\(\)\.default\('Anonymous'\)/)
+    expect(userContent).toMatch(/insertable_user[^}]+email:\s*z\.string\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
+    expect(userContent).toMatch(/insertable_user[^}]+bio:\s*z\.string\(\)\.nullable\(\)\.default\('No bio provided'\)/)
+
+    // Selectable should also have defaults for fields with @default (snake_case naming)
+    expect(userContent).toMatch(/selectable_user[^}]+name:\s*z\.string\(\)\.default\('Anonymous'\)/)
+    expect(userContent).toMatch(/selectable_user[^}]+bio:\s*z\.string\(\)\.nullable\(\)\.default\('No bio provided'\)/)
   })
 
   test('should handle number default values correctly', async () => {
@@ -99,17 +103,22 @@ model Product {
     
     console.log('Generated number default content:', productContent)
     
-    // Main schema should have required numbers
-    expect(productContent).toContain("price: z.number()")
-    expect(productContent).toContain("quantity: z.number()")
-    expect(productContent).toContain("rating: z.number().nullable()")
-    expect(productContent).toContain("discount: z.number().nullable()")
-    
-    // Insertable should have defaults for fields with @default
-    expect(productContent).toMatch(/insertable_Product[^}]+price:\s*z\.number\(\)\.default\(0\.0\)/)
-    expect(productContent).toMatch(/insertable_Product[^}]+quantity:\s*z\.number\(\)\.default\(1\)/)
-    expect(productContent).toMatch(/insertable_Product[^}]+rating:\s*z\.number\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
-    expect(productContent).toMatch(/insertable_Product[^}]+discount:\s*z\.number\(\)\.nullable\(\)\.default\(0\)/)
+    // Main schema should have defaults for fields with @default
+    expect(productContent).toContain("price: z.number().default(0.0)")
+    expect(productContent).toContain("quantity: z.number().default(1)")
+    expect(productContent).toContain("rating: z.number().nullable()")  // No default
+    expect(productContent).toContain("discount: z.number().nullable().default(0)")
+
+    // Insertable should have defaults for fields with @default (snake_case naming)
+    expect(productContent).toMatch(/insertable_product[^}]+price:\s*z\.number\(\)\.default\(0\.0\)/)
+    expect(productContent).toMatch(/insertable_product[^}]+quantity:\s*z\.number\(\)\.default\(1\)/)
+    expect(productContent).toMatch(/insertable_product[^}]+rating:\s*z\.number\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
+    expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.number\(\)\.nullable\(\)\.default\(0\)/)
+
+    // Selectable should also have defaults for fields with @default (snake_case naming)
+    expect(productContent).toMatch(/selectable_product[^}]+price:\s*z\.number\(\)\.default\(0\.0\)/)
+    expect(productContent).toMatch(/selectable_product[^}]+quantity:\s*z\.number\(\)\.default\(1\)/)
+    expect(productContent).toMatch(/selectable_product[^}]+discount:\s*z\.number\(\)\.nullable\(\)\.default\(0\)/)
   })
 
   test('should handle boolean default values correctly', async () => {
@@ -154,17 +163,22 @@ model Settings {
     
     console.log('Generated boolean default content:', settingsContent)
     
-    // Main schema should have required booleans
-    expect(settingsContent).toContain("isActive: z.boolean()")
-    expect(settingsContent).toContain("isPublic: z.boolean()")
-    expect(settingsContent).toContain("notifications: z.boolean()")
-    expect(settingsContent).toContain("darkMode: z.boolean().nullable()")
-    
-    // Insertable should have defaults for fields with @default
-    expect(settingsContent).toMatch(/insertable_Settings[^}]+isActive:\s*z\.boolean\(\)\.default\(true\)/)
-    expect(settingsContent).toMatch(/insertable_Settings[^}]+isPublic:\s*z\.boolean\(\)\.default\(false\)/)
-    expect(settingsContent).toMatch(/insertable_Settings[^}]+notifications:\s*z\.boolean\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
-    expect(settingsContent).toMatch(/insertable_Settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)\.default\(true\)/)
+    // Main schema should have defaults for fields with @default
+    expect(settingsContent).toContain("isActive: z.boolean().default(true)")
+    expect(settingsContent).toContain("isPublic: z.boolean().default(false)")
+    expect(settingsContent).toContain("notifications: z.boolean()")  // No default
+    expect(settingsContent).toContain("darkMode: z.boolean().nullable().default(true)")
+
+    // Insertable should have defaults for fields with @default (snake_case naming)
+    expect(settingsContent).toMatch(/insertable_settings[^}]+isActive:\s*z\.boolean\(\)\.default\(true\)/)
+    expect(settingsContent).toMatch(/insertable_settings[^}]+isPublic:\s*z\.boolean\(\)\.default\(false\)/)
+    expect(settingsContent).toMatch(/insertable_settings[^}]+notifications:\s*z\.boolean\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
+    expect(settingsContent).toMatch(/insertable_settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)\.default\(true\)/)
+
+    // Selectable should also have defaults for fields with @default (snake_case naming)
+    expect(settingsContent).toMatch(/selectable_settings[^}]+isActive:\s*z\.boolean\(\)\.default\(true\)/)
+    expect(settingsContent).toMatch(/selectable_settings[^}]+isPublic:\s*z\.boolean\(\)\.default\(false\)/)
+    expect(settingsContent).toMatch(/selectable_settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)\.default\(true\)/)
   })
 
   test('should handle DateTime default values correctly', async () => {
@@ -209,15 +223,15 @@ model Post {
     
     console.log('Generated DateTime default content:', postContent)
     
-    // Main schema should have required dates
-    expect(postContent).toContain("createdAt: z.date()")
-    expect(postContent).toContain("updatedAt: z.date()")
-    expect(postContent).toContain("publishedAt: z.date().nullable()")
+    // Main schema should NOT have defaults for auto-generated dates
+    expect(postContent).toContain("createdAt: z.date()")  // Auto-generated, no default in main schema
+    expect(postContent).toContain("updatedAt: z.date()")  // Auto-generated, no default in main schema
+    expect(postContent).toContain("publishedAt: z.date().nullable()")  // No default
     
-    // Insertable should handle auto-generated dates as optional
-    expect(postContent).toMatch(/insertable_Post[^}]+createdAt:\s*z\.date\(\)\.optional\(\)/) // now() is auto-generated
-    expect(postContent).toMatch(/insertable_Post[^}]+updatedAt:\s*z\.date\(\)\.optional\(\)/) // @updatedAt is auto-generated
-    expect(postContent).toMatch(/insertable_Post[^}]+publishedAt:\s*z\.date\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
+    // Insertable should handle auto-generated dates as optional (snake_case naming)
+    expect(postContent).toMatch(/insertable_post[^}]+createdAt:\s*z\.date\(\)\.optional\(\)/) // now() is auto-generated
+    expect(postContent).toMatch(/insertable_post[^}]+updatedAt:\s*z\.date\(\)\.optional\(\)/) // @updatedAt is auto-generated
+    expect(postContent).toMatch(/insertable_post[^}]+publishedAt:\s*z\.date\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
   })
 
   test('should handle mixed data types with defaults correctly', async () => {
@@ -270,8 +284,8 @@ model Account {
     
     console.log('Generated mixed types default content:', accountContent)
     
-    // Insertable should have proper defaults for all types
-    expect(accountContent).toMatch(/insertable_Account[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/) // Auto-increment
+    // Insertable should have proper defaults for all types (snake_case naming)
+    expect(accountContent).toMatch(/insertable_account[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/) // Auto-increment
     expect(accountContent).toContain("username: z.string().default('user')") // String default
     expect(accountContent).toContain("balance: z.number().default(0.0)") // Number default
     expect(accountContent).toContain("isVerified: z.boolean().default(false)") // Boolean default
@@ -279,5 +293,77 @@ model Account {
     expect(accountContent).toContain("createdAt: z.date().optional()") // Auto-generated date
     expect(accountContent).toContain("lastLogin: z.date().nullable()") // Nullable, no default
     expect(accountContent).toContain("metadata: z.string().nullable().default('{}')") // Nullable string with default
+  })
+
+  test('should include defaults in main schema (not just insertable)', async () => {
+    const tempDir = join(tmpdir(), 'mutano-main-schema-defaults-test-' + Date.now())
+    await mkdir(tempDir, { recursive: true })
+
+    const schemaPath = join(tempDir, 'schema.prisma')
+    const schemaContent = `
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Priority {
+  LOW
+  HIGH
+}
+
+model Task {
+  id       Int      @id @default(autoincrement())
+  title    String   @default("New Task")
+  priority Priority @default(LOW)
+  done     Boolean  @default(false)
+  score    Int      @default(100)
+}
+`
+
+    await writeFile(schemaPath, schemaContent)
+
+    const result = await generate({
+      origin: {
+        type: 'prisma',
+        path: schemaPath
+      },
+      destinations: [{
+        type: 'zod'
+      }],
+      dryRun: true
+    })
+
+    const taskContent = result['Task.zod.ts']
+    expect(taskContent).toBeDefined()
+
+    console.log('Generated main schema defaults content:', taskContent)
+
+    // Main schema should have defaults for all fields with @default (except auto-generated) - snake_case naming
+    expect(taskContent).toContain("export const task = z.object({")  // snake_case
+    expect(taskContent).toContain("id: z.number().nonnegative()")  // Auto-increment, no default
+    expect(taskContent).toContain("title: z.string().default('New Task')")  // String default
+    expect(taskContent).toContain("priority: z.enum(['LOW','HIGH']).default('LOW')")  // Enum default
+    expect(taskContent).toContain("done: z.boolean().default(false)")  // Boolean default
+    expect(taskContent).toContain("score: z.number().default(100)")  // Number default
+
+    // Insertable schema should have same defaults plus optional auto-generated fields - snake_case naming
+    expect(taskContent).toContain("export const insertable_task = z.object({")  // snake_case
+    expect(taskContent).toContain("id: z.number().nonnegative().optional()")  // Auto-increment, optional
+    expect(taskContent).toContain("title: z.string().default('New Task')")  // String default
+    expect(taskContent).toContain("priority: z.enum(['LOW','HIGH']).default('LOW')")  // Enum default
+    expect(taskContent).toContain("done: z.boolean().default(false)")  // Boolean default
+    expect(taskContent).toContain("score: z.number().default(100)")  // Number default
+
+    // Selectable schema should ALSO have defaults - snake_case naming
+    expect(taskContent).toContain("export const selectable_task = z.object({")  // snake_case
+    expect(taskContent).toContain("id: z.number().nonnegative()")  // Auto-increment, no default
+    expect(taskContent).toContain("title: z.string().default('New Task')")  // String default with default!
+    expect(taskContent).toContain("priority: z.enum(['LOW','HIGH']).default('LOW')")  // Enum default with default!
+    expect(taskContent).toContain("done: z.boolean().default(false)")  // Boolean default with default!
+    expect(taskContent).toContain("score: z.number().default(100)")  // Number default with default!
   })
 })

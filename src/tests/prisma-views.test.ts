@@ -120,12 +120,12 @@ view UserStats {
 
     const userProfileContent = result['UserProfile.zod.ts']
     expect(userProfileContent).toContain('// View schema (read-only)')
-    expect(userProfileContent).toContain('export const UserProfile_view = z.object({')
+    expect(userProfileContent).toContain('export const user_profile_view = z.object({')
     expect(userProfileContent).toContain('id: z.number()')
     expect(userProfileContent).toContain('email: z.string()')
     expect(userProfileContent).toContain('name: z.string().nullable()')
     expect(userProfileContent).toContain("status: z.enum(['ACTIVE','INACTIVE','PENDING'])") // Enum in view should remain enum
-    expect(userProfileContent).toContain('export type UserProfileViewType = z.infer<typeof UserProfile_view>')
+    expect(userProfileContent).toContain('export type UserProfileViewType = z.infer<typeof user_profile_view>')
 
     // Should not contain insertable/updateable schemas for views
     expect(userProfileContent).not.toContain('insertable_')
