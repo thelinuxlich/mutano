@@ -933,7 +933,7 @@ function extractPrismaColumnDescriptions(config, entityName, enumDeclarations) {
   });
 }
 
-const defaultKyselyHeader = "import { Generated, Insertable, Selectable, Updateable, ColumnType } from 'kysely';\n\n";
+const defaultKyselyHeader = "import { Insertable, Selectable, Updateable, ColumnType } from 'kysely';\n\n";
 const defaultZodHeader = (version) => "import { z } from 'zod" + (version === 3 ? "" : "/v4") + "';\n\n";
 const kyselyJsonTypes = `// JSON type definitions
 export type Json = ColumnType<JsonValue, string, string>;

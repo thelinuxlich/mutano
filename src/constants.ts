@@ -3,7 +3,7 @@
  */
 
 export const defaultKyselyHeader =
-  "import { Generated, Insertable, Selectable, Updateable, ColumnType } from 'kysely';\n\n"
+  "import { Insertable, Selectable, Updateable, ColumnType } from 'kysely';\n\n"
 
 export const defaultZodHeader = (version: 3 | 4) => 
   "import { z } from 'zod" + (version === 3 ? '' : '/v4') + "';\n\n"

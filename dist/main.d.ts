@@ -110,7 +110,7 @@ type PrismaValidTypes = 'String' | 'Boolean' | 'Int' | 'BigInt' | 'Float' | 'Dec
 /**
  * Constants and default headers for code generation
  */
-declare const defaultKyselyHeader = "import { Generated, Insertable, Selectable, Updateable, ColumnType } from 'kysely';\n\n";
+declare const defaultKyselyHeader = "import { Insertable, Selectable, Updateable, ColumnType } from 'kysely';\n\n";
 declare const defaultZodHeader: (version: 3 | 4) => string;
 
 /**
