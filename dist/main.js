@@ -606,7 +606,8 @@ function generateKyselyContent({
     let fieldType = getType("table", desc, config, destination);
     const isAutoIncrement = desc.Extra.toLowerCase().includes("auto_increment");
     const isDefaultGenerated = desc.Extra.toLowerCase().includes("default_generated");
-    if (isAutoIncrement || isDefaultGenerated) {
+    const hasExplicitDefault = desc.Default !== null && !isAutoIncrement && !isDefaultGenerated;
+    if (isAutoIncrement || isDefaultGenerated || hasExplicitDefault) {
       fieldType = `Generated<${fieldType.replace(" | null", "")}>${fieldType.includes(" | null") ? " | null" : ""}`;
     }
     content += `  ${fieldName}: ${fieldType};

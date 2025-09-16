@@ -221,11 +221,14 @@ function generateKyselyContent({
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
     let fieldType = getType('table', desc, config, destination)
 
-    // Handle auto-increment fields
+    // Handle auto-increment and default-generated fields
     const isAutoIncrement = desc.Extra.toLowerCase().includes('auto_increment')
     const isDefaultGenerated = desc.Extra.toLowerCase().includes('default_generated')
-    
-    if (isAutoIncrement || isDefaultGenerated) {
+
+    // Handle explicit default values (like @default('DRAFT'), @default(100), etc.)
+    const hasExplicitDefault = desc.Default !== null && !isAutoIncrement && !isDefaultGenerated
+
+    if (isAutoIncrement || isDefaultGenerated || hasExplicitDefault) {
       fieldType = `Generated<${fieldType.replace(' | null', '')}>${fieldType.includes(' | null') ? ' | null' : ''}`
     }
 
