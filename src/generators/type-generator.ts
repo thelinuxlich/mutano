@@ -110,22 +110,34 @@ export function getType(
   if (isZodDestination && config.magicComments) {
     const zodOverrideType = extractZodExpression(Comment)
     if (zodOverrideType) {
-      const shouldBeNullable =
-        isNull ||
-        (['insertable', 'updateable'].includes(op) &&
-          (hasDefaultValue || isGenerated)) ||
-        (op === 'updateable' && !isNull && !hasDefaultValue)
+      const shouldBeNullable = isNull
+      const shouldBeOptional =
+        (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
+        (op === 'updateable')
 
       const nullishOption = (destination as any).nullish
       const nullableMethod = nullishOption ? 'nullish' : 'nullable'
 
       let finalType = zodOverrideType
 
-      // Apply nullability if needed and not already present
-      if (shouldBeNullable) {
+      // Apply nullability and optionality correctly
+      if (shouldBeNullable && shouldBeOptional) {
+        // Field is both nullable and optional
         if (!zodOverrideType.includes(`.${nullableMethod}()`) &&
             !zodOverrideType.includes('.optional()')) {
           finalType = `${zodOverrideType}.${nullableMethod}()`
+        }
+      } else if (shouldBeNullable) {
+        // Field is nullable but required
+        if (!zodOverrideType.includes(`.${nullableMethod}()`) &&
+            !zodOverrideType.includes('.optional()')) {
+          finalType = `${zodOverrideType}.${nullableMethod}()`
+        }
+      } else if (shouldBeOptional) {
+        // Field is optional but not nullable
+        if (!zodOverrideType.includes('.optional()') &&
+            !zodOverrideType.includes(`.${nullableMethod}()`)) {
+          finalType = `${zodOverrideType}.optional()`
         }
       }
 

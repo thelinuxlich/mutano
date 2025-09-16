@@ -243,13 +243,22 @@ function getType(op, desc, config, destination) {
   if (isZodDestination && config.magicComments) {
     const zodOverrideType = extractZodExpression(Comment);
     if (zodOverrideType) {
-      const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
+      const shouldBeNullable = isNull;
+      const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
       const nullishOption = destination.nullish;
       const nullableMethod = nullishOption ? "nullish" : "nullable";
       let finalType = zodOverrideType;
-      if (shouldBeNullable) {
+      if (shouldBeNullable && shouldBeOptional) {
         if (!zodOverrideType.includes(`.${nullableMethod}()`) && !zodOverrideType.includes(".optional()")) {
           finalType = `${zodOverrideType}.${nullableMethod}()`;
+        }
+      } else if (shouldBeNullable) {
+        if (!zodOverrideType.includes(`.${nullableMethod}()`) && !zodOverrideType.includes(".optional()")) {
+          finalType = `${zodOverrideType}.${nullableMethod}()`;
+        }
+      } else if (shouldBeOptional) {
+        if (!zodOverrideType.includes(".optional()") && !zodOverrideType.includes(`.${nullableMethod}()`)) {
+          finalType = `${zodOverrideType}.optional()`;
         }
       }
       if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
