@@ -246,7 +246,26 @@ function getType(op, desc, config, destination) {
       const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
       const nullishOption = destination.nullish;
       const nullableMethod = nullishOption ? "nullish" : "nullable";
-      return shouldBeNullable ? zodOverrideType.includes(`.${nullableMethod}()`) || zodOverrideType.includes(".optional()") ? zodOverrideType : `${zodOverrideType}.${nullableMethod}()` : zodOverrideType;
+      let finalType = zodOverrideType;
+      if (shouldBeNullable) {
+        if (!zodOverrideType.includes(`.${nullableMethod}()`) && !zodOverrideType.includes(".optional()")) {
+          finalType = `${zodOverrideType}.${nullableMethod}()`;
+        }
+      }
+      if ((op === "table" || op === "insertable" || op === "selectable") && hasDefaultValue && Default !== null && !isGenerated) {
+        let defaultValueFormatted = Default;
+        if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
+          defaultValueFormatted = `'${Default}'`;
+        } else if (typeMappings.booleanTypes.includes(type)) {
+          defaultValueFormatted = Default.toLowerCase() === "true" ? "true" : "false";
+        } else if (typeMappings.numberTypes.includes(type)) {
+          defaultValueFormatted = Default;
+        } else {
+          defaultValueFormatted = `'${Default}'`;
+        }
+        finalType = `${finalType}.default(${defaultValueFormatted})`;
+      }
+      return finalType;
     }
   }
   const overrideTypes = config.origin.overrideTypes;
@@ -604,11 +623,14 @@ function generateKyselyContent({
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
     let fieldType = getType("table", desc, config, destination);
-    const isAutoIncrement = desc.Extra.toLowerCase().includes("auto_increment");
-    const isDefaultGenerated = desc.Extra.toLowerCase().includes("default_generated");
-    const hasExplicitDefault = desc.Default !== null && !isAutoIncrement && !isDefaultGenerated;
-    if (isAutoIncrement || isDefaultGenerated || hasExplicitDefault) {
-      fieldType = `Generated<${fieldType.replace(" | null", "")}>${fieldType.includes(" | null") ? " | null" : ""}`;
+    const hasMagicComment = config.magicComments && (desc.Comment.includes("@kysely(") || desc.Comment.includes("@ts("));
+    if (!hasMagicComment) {
+      const isAutoIncrement = desc.Extra.toLowerCase().includes("auto_increment");
+      const isDefaultGenerated = desc.Extra.toLowerCase().includes("default_generated");
+      const hasExplicitDefault = desc.Default !== null && !isAutoIncrement && !isDefaultGenerated;
+      if (isAutoIncrement || isDefaultGenerated || hasExplicitDefault) {
+        fieldType = `Generated<${fieldType.replace(" | null", "")}>${fieldType.includes(" | null") ? " | null" : ""}`;
+      }
     }
     content += `  ${fieldName}: ${fieldType};
 `;

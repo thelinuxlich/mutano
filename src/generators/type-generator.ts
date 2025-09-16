@@ -119,12 +119,38 @@ export function getType(
       const nullishOption = (destination as any).nullish
       const nullableMethod = nullishOption ? 'nullish' : 'nullable'
 
-      return shouldBeNullable
-        ? zodOverrideType.includes(`.${nullableMethod}()`) ||
-          zodOverrideType.includes('.optional()')
-          ? zodOverrideType
-          : `${zodOverrideType}.${nullableMethod}()`
-        : zodOverrideType
+      let finalType = zodOverrideType
+
+      // Apply nullability if needed and not already present
+      if (shouldBeNullable) {
+        if (!zodOverrideType.includes(`.${nullableMethod}()`) &&
+            !zodOverrideType.includes('.optional()')) {
+          finalType = `${zodOverrideType}.${nullableMethod}()`
+        }
+      }
+
+      // Apply default value if field has explicit default (not auto-generated)
+      if ((op === 'table' || op === 'insertable' || op === 'selectable') &&
+          hasDefaultValue && Default !== null && !isGenerated) {
+        // Format default value appropriately
+        let defaultValueFormatted = Default
+
+        // Handle different types of default values
+        if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
+          defaultValueFormatted = `'${Default}'`
+        } else if (typeMappings.booleanTypes.includes(type)) {
+          defaultValueFormatted = Default.toLowerCase() === 'true' ? 'true' : 'false'
+        } else if (typeMappings.numberTypes.includes(type)) {
+          defaultValueFormatted = Default
+        } else {
+          // For other types, wrap in quotes
+          defaultValueFormatted = `'${Default}'`
+        }
+
+        finalType = `${finalType}.default(${defaultValueFormatted})`
+      }
+
+      return finalType
     }
   }
 

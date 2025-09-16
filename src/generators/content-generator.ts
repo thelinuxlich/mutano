@@ -221,15 +221,24 @@ function generateKyselyContent({
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
     let fieldType = getType('table', desc, config, destination)
 
-    // Handle auto-increment and default-generated fields
-    const isAutoIncrement = desc.Extra.toLowerCase().includes('auto_increment')
-    const isDefaultGenerated = desc.Extra.toLowerCase().includes('default_generated')
+    // Check if field has magic comment override - if so, don't wrap in Generated<>
+    const hasMagicComment = config.magicComments && (
+      desc.Comment.includes('@kysely(') ||
+      desc.Comment.includes('@ts(')
+    )
 
-    // Handle explicit default values (like @default('DRAFT'), @default(100), etc.)
-    const hasExplicitDefault = desc.Default !== null && !isAutoIncrement && !isDefaultGenerated
+    // Only apply Generated<> wrapping if there's no magic comment override
+    if (!hasMagicComment) {
+      // Handle auto-increment and default-generated fields
+      const isAutoIncrement = desc.Extra.toLowerCase().includes('auto_increment')
+      const isDefaultGenerated = desc.Extra.toLowerCase().includes('default_generated')
 
-    if (isAutoIncrement || isDefaultGenerated || hasExplicitDefault) {
-      fieldType = `Generated<${fieldType.replace(' | null', '')}>${fieldType.includes(' | null') ? ' | null' : ''}`
+      // Handle explicit default values (like @default('DRAFT'), @default(100), etc.)
+      const hasExplicitDefault = desc.Default !== null && !isAutoIncrement && !isDefaultGenerated
+
+      if (isAutoIncrement || isDefaultGenerated || hasExplicitDefault) {
+        fieldType = `Generated<${fieldType.replace(' | null', '')}>${fieldType.includes(' | null') ? ' | null' : ''}`
+      }
     }
 
     content += `  ${fieldName}: ${fieldType};\n`
