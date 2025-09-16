@@ -90,16 +90,16 @@ export interface InsertableUser {
 
 **Kysely Types:**
 ```typescript
-export interface UserTable {
+export interface User {
   id: Generated<number>;
   name: string;
   email: string;
   role: 'admin' | 'user';
 }
 
-export type User = Selectable<UserTable>;
-export type NewUser = Insertable<UserTable>;
-export type UserUpdate = Updateable<UserTable>;
+export type SelectableUser = Selectable<User>;
+export type InsertableUser = Insertable<User>;
+export type UpdateableUser = Updateable<User>;
 ```
 
 ## Configuration
