@@ -1,20 +1,24 @@
 {
   "name": "mutano",
   "type": "module",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Converts Prisma/MySQL/PostgreSQL/SQLite schemas to Zod/TS/Kysely interfaces",
   "author": "Alisson Cavalcante Agiani <thelinuxlich@gmail.com>",
   "license": "MIT",
   "repository": "git@github.com:thelinuxlich/mutano.git",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "esbuild src/main.ts --format=esm --platform=node --outfile=dist/main.js && tsc src/main.ts -d --emitDeclarationOnly --esModuleInterop --outDir dist",
+    "build": "pkgroll",
     "test": "vitest run"
   },
   "dependencies": {
     "@mrleebo/prisma-ast": "^0.13.0",
+    "@types/fs-extra": "^11.0.4",
+    "@types/pg": "^8.15.5",
     "camelcase": "^8.0.0",
     "fs-extra": "^11.3.2",
     "knex": "^3.1.0",
@@ -24,11 +28,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.8",
-    "@types/fs-extra": "^11.0.4",
-    "@types/pg": "^8.15.5",
-    "esbuild": "^0.25.9",
-    "ts-node": "^10.9.2",
-    "tsx": "4.19.4",
+    "pkgroll": "^2.15.4",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }
