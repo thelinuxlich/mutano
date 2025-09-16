@@ -173,7 +173,7 @@ export type UserUpdate = Updateable<UserTable>;
 
 ## Magic Comments
 
-Override types for specific columns using database comments (MySQL/PostgreSQL only):
+Override types for specific columns using database comments:
 
 ```sql
 CREATE TABLE `user` (
