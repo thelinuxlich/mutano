@@ -52,7 +52,7 @@ model Product {
       // Main schema checks
       expect(productContent).toContain("price: z.string().trim().min(1)") // No default, should have .min(1)
       expect(productContent).toContain("discount: z.string().trim().default('0.00')") // Has default, should NOT have .min(1)
-      expect(productContent).toContain("weight: z.string().trim().min(1).nullable()") // Nullable without default, should have .min(1)
+      expect(productContent).toContain("weight: z.string().trim().nullable()") // Nullable without default, should NOT have .min(1) (NEW BEHAVIOR)
       expect(productContent).toContain("shipping: z.string().trim().nullable().default('5.99')") // Nullable with default, should NOT have .min(1)
       
       // Verify that fields with defaults do NOT have .min(1)
@@ -63,11 +63,13 @@ model Product {
       expect(productContent).toMatch(/insertable_product[^}]+price:\s*z\.string\(\)\.trim\(\)\.min\(1\)/) // No default, should have .min(1)
       expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('0\.00'\)/) // Has default, should NOT have .min(1)
       expect(productContent).toMatch(/insertable_product[^}]+shipping:\s*z\.string\(\)\.trim\(\)\.nullable\(\)\.default\('5\.99'\)/) // Nullable with default, should NOT have .min(1)
+      expect(productContent).toMatch(/insertable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.nullable\(\)/) // Nullable without default, should NOT have .min(1)
       
       // Updateable schema checks
       expect(productContent).toMatch(/updateable_product[^}]+price:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)/) // No default, should have .min(1)
       expect(productContent).toMatch(/updateable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('0\.00'\)/) // Has default, should NOT have .min(1)
       expect(productContent).toMatch(/updateable_product[^}]+shipping:\s*z\.string\(\)\.trim\(\)\.nullable\(\)\.default\('5\.99'\)/) // Nullable with default, should NOT have .min(1)
+      expect(productContent).toMatch(/updateable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.nullable\(\)/) // Nullable without default, should NOT have .min(1)
       
       // Selectable schema should not have any validation
       expect(productContent).toMatch(/selectable_product[^}]+price:\s*z\.string\(\)(?!\.trim)/)

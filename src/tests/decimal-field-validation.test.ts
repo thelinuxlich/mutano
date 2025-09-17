@@ -48,19 +48,19 @@ model Product {
       const productContent = result['Product.zod.ts']
       console.log('Generated decimal validation content:', productContent)
       
-      // Main schema should have decimal fields with .trim().min(1) only if no default
+      // Main schema should have decimal fields with .trim().min(1) only if no default and not nullable
       expect(productContent).toContain("price: z.string().trim().min(1)")
-      expect(productContent).toContain("discount: z.string().trim().min(1).nullable()")
+      expect(productContent).toContain("discount: z.string().trim().nullable()") // Nullable, should NOT have .min(1)
       expect(productContent).toContain("weight: z.string().trim().default('0.0')") // Has default, should NOT have .min(1)
       
-      // Insertable schema should have decimal fields with .trim().min(1) only if no default
+      // Insertable schema should have decimal fields with .trim().min(1) only if no default and not nullable
       expect(productContent).toMatch(/insertable_product[^}]+price:\s*z\.string\(\)\.trim\(\)\.min\(1\)/)
-      expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.nullable\(\)/)
+      expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.nullable\(\)/) // Nullable, should NOT have .min(1)
       expect(productContent).toMatch(/insertable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('0\.0'\)/) // Has default, should NOT have .min(1)
 
-      // Updateable schema should have decimal fields with .trim().min(1) only if no default
+      // Updateable schema should have decimal fields with .trim().min(1) only if no default and not nullable
       expect(productContent).toMatch(/updateable_product[^}]+price:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)/)
-      expect(productContent).toMatch(/updateable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.nullable\(\)/)
+      expect(productContent).toMatch(/updateable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.nullable\(\)/) // Nullable, should NOT have .min(1)
       expect(productContent).toMatch(/updateable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('0\.0'\)/) // Has default, should NOT have .min(1)
       
       // Selectable schema should NOT have .trim().min(1) (data from DB is already validated)
@@ -114,7 +114,7 @@ model Account {
       
       // Should work with PostgreSQL decimal types
       expect(accountContent).toContain("balance: z.string().trim().min(1)")
-      expect(accountContent).toContain("fee: z.string().trim().min(1).nullable()")
+      expect(accountContent).toContain("fee: z.string().trim().nullable()") // Nullable, should NOT have .min(1)
       
       // Selectable should not have validation
       expect(accountContent).toMatch(/selectable_account[^}]+balance:\s*z\.string\(\)(?!\.trim)/)

@@ -386,7 +386,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
       baseType = "z.string()";
       if (op !== "selectable") {
         baseType += ".trim()";
-        if (!hasDefaultValue) {
+        if (!hasDefaultValue && !shouldBeNullable) {
           baseType += ".min(1)";
         }
       }

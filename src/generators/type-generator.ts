@@ -340,8 +340,8 @@ function generateStandardType(
       // Selectable schemas represent data from DB which is already validated/stored
       if (op !== 'selectable') {
         baseType += '.trim()'
-        // For decimal fields with default values, don't add .min(1) validation
-        if (!hasDefaultValue) {
+        // For decimal fields with default values or nullable fields, don't add .min(1) validation
+        if (!hasDefaultValue && !shouldBeNullable) {
           baseType += '.min(1)'
         }
       }
