@@ -335,6 +335,12 @@ function generateStandardType(
   } else if (typeMappings.decimalTypes.includes(type)) {
     if (isZodDestination) {
       baseType = 'z.string()'
+      // Apply validation modifiers for decimal fields (similar to string fields)
+      // Only apply validation modifiers to input schemas, not selectable schemas
+      // Selectable schemas represent data from DB which is already validated/stored
+      if (op !== 'selectable') {
+        baseType += '.trim().min(1)'
+      }
     } else if (isKyselyDestination) {
       baseType = 'Decimal'
     } else {

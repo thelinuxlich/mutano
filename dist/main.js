@@ -384,6 +384,9 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   } else if (typeMappings.decimalTypes.includes(type)) {
     if (isZodDestination) {
       baseType = "z.string()";
+      if (op !== "selectable") {
+        baseType += ".trim().min(1)";
+      }
     } else if (isKyselyDestination) {
       baseType = "Decimal";
     } else {
