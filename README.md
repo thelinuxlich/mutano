@@ -145,6 +145,7 @@ export type UpdateableUser = Updateable<User>;
 
   // Zod specific
   useDateType?: boolean,
+  useBooleanType?: boolean,
   useTrim?: boolean,
   nullish?: boolean,
   requiredString?: boolean,
@@ -158,6 +159,15 @@ export type UpdateableUser = Updateable<User>;
   schemaName?: string // Default: 'DB'
 }
 ```
+
+### Zod Configuration Options
+
+- **`useDateType`**: When `true`, generates `z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())` instead of `z.date()` for date fields
+- **`useBooleanType`**: When `true`, generates `z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean())` instead of `z.boolean()` for boolean fields
+- **`useTrim`**: When `true`, adds `.trim()` to string fields
+- **`nullish`**: When `true`, uses `.nullish()` instead of `.nullable()` for nullable fields (except selectable schemas)
+- **`requiredString`**: When `true`, adds `.min(1)` validation to required string fields
+- **`version`**: Zod version (3 or 4) for compatibility
 
 ### Global Options
 | Option | Description |

@@ -348,7 +348,16 @@ function generateStandardType(
       baseType = 'number'
     }
   } else if (typeMappings.booleanTypes.includes(type)) {
-    baseType = isZodDestination ? 'z.boolean()' : 'boolean'
+    if (isZodDestination) {
+      const useBooleanType = (destination as any).useBooleanType
+      if (useBooleanType) {
+        baseType = 'z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean())'
+      } else {
+        baseType = 'z.boolean()'
+      }
+    } else {
+      baseType = 'boolean'
+    }
   } else if (typeMappings.stringTypes.includes(type)) {
     if (isZodDestination) {
       const useTrim = (destination as any).useTrim

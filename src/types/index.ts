@@ -16,6 +16,7 @@ export type Destination =
   | {
       type: 'zod'
       useDateType?: boolean
+      useBooleanType?: boolean
       useTrim?: boolean
       nullish?: boolean
       requiredString?: boolean
