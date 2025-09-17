@@ -218,8 +218,7 @@ function getType(op, desc, config, destination) {
       if (config.magicComments) {
         const kyselyOverrideType = extractKyselyExpression(Comment);
         if (kyselyOverrideType) {
-          const shouldBeNullable2 = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
-          return shouldBeNullable2 ? kyselyOverrideType.includes("| null") ? kyselyOverrideType : `${kyselyOverrideType} | null` : kyselyOverrideType;
+          return kyselyOverrideType;
         }
       }
       const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
@@ -228,53 +227,20 @@ function getType(op, desc, config, destination) {
     if (isKyselyDestination && config.magicComments) {
       const kyselyOverrideType = extractKyselyExpression(Comment);
       if (kyselyOverrideType) {
-        const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
-        return shouldBeNullable ? kyselyOverrideType.includes("| null") ? kyselyOverrideType : `${kyselyOverrideType} | null` : kyselyOverrideType;
+        return kyselyOverrideType;
       }
     }
     if ((isTsDestination || isKyselyDestination) && config.magicComments) {
       const tsOverrideType = extractTSExpression(Comment);
       if (tsOverrideType) {
-        const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
-        return shouldBeNullable ? tsOverrideType.includes("| null") ? tsOverrideType : `${tsOverrideType} | null` : tsOverrideType;
+        return tsOverrideType;
       }
     }
   }
   if (isZodDestination && config.magicComments) {
     const zodOverrideType = extractZodExpression(Comment);
     if (zodOverrideType) {
-      const shouldBeNullable = isNull;
-      const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
-      const nullishOption = destination.nullish;
-      const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
-      let finalType = zodOverrideType;
-      if (shouldBeNullable && shouldBeOptional) {
-        if (!zodOverrideType.includes(`.${nullableMethod}()`) && !zodOverrideType.includes(".optional()")) {
-          finalType = `${zodOverrideType}.${nullableMethod}()`;
-        }
-      } else if (shouldBeNullable) {
-        if (!zodOverrideType.includes(`.${nullableMethod}()`) && !zodOverrideType.includes(".optional()")) {
-          finalType = `${zodOverrideType}.${nullableMethod}()`;
-        }
-      } else if (shouldBeOptional) {
-        if (!zodOverrideType.includes(".optional()") && !zodOverrideType.includes(`.${nullableMethod}()`)) {
-          finalType = `${zodOverrideType}.optional()`;
-        }
-      }
-      if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
-        let defaultValueFormatted = Default;
-        if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
-          defaultValueFormatted = `'${Default}'`;
-        } else if (typeMappings.booleanTypes.includes(type)) {
-          defaultValueFormatted = Default.toLowerCase() === "true" ? "true" : "false";
-        } else if (typeMappings.numberTypes.includes(type)) {
-          defaultValueFormatted = Default;
-        } else {
-          defaultValueFormatted = `'${Default}'`;
-        }
-        finalType = `${finalType}.default(${defaultValueFormatted})`;
-      }
-      return finalType;
+      return zodOverrideType;
     }
   }
   const overrideTypes = config.origin.overrideTypes;

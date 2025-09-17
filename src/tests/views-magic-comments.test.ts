@@ -61,8 +61,8 @@ describe('Views with Magic Comments', () => {
     expect(content).toContain('// View schema (read-only)')
     expect(content).toContain('export const user_scores_view = z.object({')
     expect(content).toContain('id: z.number()')
-    expect(content).toContain('email: z.string().email().min(5).max(100)')
-    expect(content).toContain('score: z.number().min(0).max(100).nullable()')
+    expect(content).toContain('email: z.string().email().min(5).max(100)')  // @zod magic comment completely overrides
+    expect(content).toContain('score: z.number().min(0).max(100)')  // @zod magic comment completely overrides (no .nullable())
     expect(content).toContain('export type UserScoresViewType = z.infer<typeof user_scores_view>')
   })
 
@@ -125,8 +125,8 @@ describe('Views with Magic Comments', () => {
     expect(content).toContain('// TypeScript interface for user_data (view - read-only)')
     expect(content).toContain('export interface UserDataView {')
     expect(content).toContain('id: number;')
-    expect(content).toContain('metadata: UserMetadata | null;')
-    expect(content).toContain('settings: Record<string, unknown>;')
+    expect(content).toContain('metadata: UserMetadata;')  // @ts magic comment completely overrides (no | null added)
+    expect(content).toContain('settings: Record<string, unknown>;')  // @ts magic comment completely overrides
   })
 
   test('should handle @kysely magic comments in view columns', () => {
@@ -188,8 +188,8 @@ describe('Views with Magic Comments', () => {
     expect(content).toContain('// Kysely type definitions for system_config (view)')
     expect(content).toContain('export interface SystemConfigView {')
     expect(content).toContain('id: number;')
-    expect(content).toContain('data: CustomJsonType | null;')
-    expect(content).toContain('config: ConfigObject;')
+    expect(content).toContain('data: CustomJsonType;')  // @kysely magic comment completely overrides (no | null added)
+    expect(content).toContain('config: ConfigObject;')  // @kysely magic comment completely overrides
     expect(content).toContain('export type SelectableSystemConfigView = Selectable<SystemConfigView>;')
   })
 
@@ -242,7 +242,7 @@ describe('Views with Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(tsContent).toContain('complex_field: ComplexType | null;')
+    expect(tsContent).toContain('complex_field: ComplexType;')  // @ts magic comment completely overrides (no | null added)
 
     // Test Kysely output
     const kyselyConfig = {
@@ -260,7 +260,7 @@ describe('Views with Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(kyselyContent).toContain('complex_field: KyselyComplexType | null;')
+    expect(kyselyContent).toContain('complex_field: KyselyComplexType;')  // @kysely magic comment completely overrides (no | null added)
 
     // Test Zod output
     const zodConfig = {
@@ -278,7 +278,7 @@ describe('Views with Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(zodContent).toContain('complex_field: z.record(z.string()).nullable()')
+    expect(zodContent).toContain('complex_field: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable() added)
   })
 
   test('should handle magic comments with camelCase conversion in views', () => {
@@ -444,6 +444,6 @@ describe('Views with Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(content).toContain('complex_data: Array<{ id: string; values: Record<string, number> }> | null;')
+    expect(content).toContain('complex_data: Array<{ id: string; values: Record<string, number> }>;')  // @ts magic comment completely overrides (no | null added)
   })
 })

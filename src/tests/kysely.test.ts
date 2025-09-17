@@ -95,7 +95,7 @@ describe('Kysely magic comments', () => {
 		}
 
 		const result = getType('table', desc, config, config.destinations[0])
-		expect(result).toBe('CustomType | null')
+		expect(result).toBe('CustomType')  // @kysely magic comment completely overrides (no | null added)
 	})
 
 	test('should not add null twice if @kysely type already includes it', () => {

@@ -68,30 +68,30 @@ describe('Table Magic Comments', () => {
     // Check main schema
     expect(content).toContain('export const user = z.object({')
     expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
-    expect(content).toContain('email: z.string().email().min(5).max(100)')
-    expect(content).toContain('score: z.number().min(0).max(100).nullable()')
-    expect(content).toContain('metadata: z.record(z.string()).nullable().default(\'{}\')')
+    expect(content).toContain('email: z.string().email().min(5).max(100)')  // @zod magic comment completely overrides
+    expect(content).toContain('score: z.number().min(0).max(100)')  // @zod magic comment completely overrides (no .nullable())
+    expect(content).toContain('metadata: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable().default())
 
     // Check insertable schema
     expect(content).toContain('export const insertable_user = z.object({')
     expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
-    expect(content).toContain('email: z.string().email().min(5).max(100)')
-    expect(content).toContain('score: z.number().min(0).max(100).nullable()')
-    expect(content).toContain('metadata: z.record(z.string()).nullable().default(\'{}\')')
+    expect(content).toContain('email: z.string().email().min(5).max(100)')  // @zod magic comment completely overrides
+    expect(content).toContain('score: z.number().min(0).max(100)')  // @zod magic comment completely overrides (no .nullable())
+    expect(content).toContain('metadata: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable().default())
 
     // Check updateable schema
     expect(content).toContain('export const updateable_user = z.object({')
     expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
-    expect(content).toContain('email: z.string().email().min(5).max(100).optional()')
-    expect(content).toContain('score: z.number().min(0).max(100).nullable()')
-    expect(content).toContain('metadata: z.record(z.string()).nullable()')
+    expect(content).toContain('email: z.string().email().min(5).max(100)')  // @zod magic comment completely overrides (no .optional())
+    expect(content).toContain('score: z.number().min(0).max(100)')  // @zod magic comment completely overrides (no .nullable())
+    expect(content).toContain('metadata: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable())
 
     // Check selectable schema
     expect(content).toContain('export const selectable_user = z.object({')
-    expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
-    expect(content).toContain('email: z.string().email().min(5).max(100)')
-    expect(content).toContain('score: z.number().min(0).max(100).nullable()')
-    expect(content).toContain('metadata: z.record(z.string()).nullable()')
+    expect(content).toContain('id: z.number()')  // No .nonnegative() and no .optional() for selectable
+    expect(content).toContain('email: z.string().email().min(5).max(100)')  // @zod magic comment completely overrides
+    expect(content).toContain('score: z.number().min(0).max(100)')  // @zod magic comment completely overrides (no .nullable())
+    expect(content).toContain('metadata: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable())
 
     // Check type exports
     expect(content).toContain('export type UserType = z.infer<typeof user>')
@@ -166,9 +166,9 @@ describe('Table Magic Comments', () => {
     expect(content).toContain('// TypeScript interfaces for user')
     expect(content).toContain('export interface User {')
     expect(content).toContain('id: number;')
-    expect(content).toContain('metadata: UserMetadata | null;')
-    expect(content).toContain('settings: Record<string, unknown>;')
-    expect(content).toContain('profile: UserProfile | null;')
+    expect(content).toContain('metadata: UserMetadata;')  // @ts magic comment completely overrides (no | null added)
+    expect(content).toContain('settings: Record<string, unknown>;')  // @ts magic comment completely overrides
+    expect(content).toContain('profile: UserProfile;')  // @ts magic comment completely overrides (no | null added)
   })
 
   test('should handle @kysely magic comments in table columns', () => {
@@ -237,9 +237,9 @@ describe('Table Magic Comments', () => {
     expect(content).toContain('// Kysely type definitions for system_config')
     expect(content).toContain('export interface SystemConfig {')
     expect(content).toContain('id: Generated<number>;')
-    expect(content).toContain('data: CustomJsonType | null;')
-    expect(content).toContain('config: ConfigObject;')
-    expect(content).toContain('status: StatusType;') // Should NOT be wrapped in Generated<> due to magic comment
+    expect(content).toContain('data: CustomJsonType;')  // @kysely magic comment completely overrides (no | null added)
+    expect(content).toContain('config: ConfigObject;')  // @kysely magic comment completely overrides
+    expect(content).toContain('status: StatusType;') // @kysely magic comment completely overrides (should NOT be wrapped in Generated<>)
     expect(content).toContain('export type SelectableSystemConfig = Selectable<SystemConfig>;')
     expect(content).toContain('export type InsertableSystemConfig = Insertable<SystemConfig>;')
     expect(content).toContain('export type UpdateableSystemConfig = Updateable<SystemConfig>;')
@@ -293,7 +293,7 @@ describe('Table Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(tsContent).toContain('complex_field: ComplexType | null;')
+    expect(tsContent).toContain('complex_field: ComplexType;')  // @ts magic comment completely overrides (no | null added)
 
     // Test Kysely output
     const kyselyConfig = {
@@ -311,7 +311,7 @@ describe('Table Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(kyselyContent).toContain('complex_field: KyselyComplexType | null;')
+    expect(kyselyContent).toContain('complex_field: KyselyComplexType;')  // @kysely magic comment completely overrides (no | null added)
 
     // Test Zod output
     const zodConfig = {
@@ -329,7 +329,7 @@ describe('Table Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(zodContent).toContain('complex_field: z.record(z.string()).nullable()')
+    expect(zodContent).toContain('complex_field: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable() added)
   })
 
   test('should handle magic comments with camelCase conversion in tables', () => {
@@ -492,7 +492,7 @@ describe('Table Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(content).toContain('complex_data: Array<{ id: string; values: Record<string, number> }> | null;')
+    expect(content).toContain('complex_data: Array<{ id: string; values: Record<string, number> }>;')  // @ts magic comment completely overrides (no | null added)
   })
 
   test('should handle magic comments with default values correctly', () => {
@@ -554,7 +554,7 @@ describe('Table Magic Comments', () => {
     // Magic comment should override type but NOT prevent Generated<> wrapping for defaults
     expect(kyselyContent).toContain('id: Generated<number>;')
     expect(kyselyContent).toContain('status: StatusEnum;') // Magic comment should prevent Generated<> wrapping
-    expect(kyselyContent).toContain('config: ConfigType | null;') // Magic comment should override type but still be nullable
+    expect(kyselyContent).toContain('config: ConfigType;') // @kysely magic comment completely overrides (no | null added)
 
     // Test Zod with defaults and magic comments
     const zodConfig = {
@@ -600,7 +600,7 @@ describe('Table Magic Comments', () => {
       defaultZodHeader,
     })
 
-    expect(zodContent).toContain('config: z.record(z.string()).nullable().default(\'{}\')')
-    expect(zodContent).toContain('status: z.enum([\'ACTIVE\', \'INACTIVE\']).default(\'ACTIVE\')')
+    expect(zodContent).toContain('config: z.record(z.string())')  // @zod magic comment completely overrides (no .nullable().default())
+    expect(zodContent).toContain('status: z.enum([\'ACTIVE\', \'INACTIVE\'])')  // @zod magic comment completely overrides (no .default())
   })
 })

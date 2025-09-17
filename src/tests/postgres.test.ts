@@ -272,13 +272,13 @@ describe('mutano with PostgreSQL (pglite)', () => {
 		const tsResult = getType('table', desc, postgresConfig, {
 			type: 'ts',
 		})
-		expect(tsResult).toContain('UserMetadata | null')
+		expect(tsResult).toContain('UserMetadata')  // @ts magic comment completely overrides (no | null added)
 
 		// Test Kysely magic comment
 		const kyselyResult = getType('table', desc, postgresConfig, {
 			type: 'kysely',
 		})
-		expect(kyselyResult).toContain('Record<string, any> | null')
+		expect(kyselyResult).toContain('Record<string, any>')  // @kysely magic comment completely overrides (no | null added)
 	})
 
 	test('should generate content for PostgreSQL tables', () => {

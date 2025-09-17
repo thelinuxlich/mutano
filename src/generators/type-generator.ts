@@ -47,16 +47,9 @@ export function getType(
       if (config.magicComments) {
         const kyselyOverrideType = extractKyselyExpression(Comment)
         if (kyselyOverrideType) {
-          const shouldBeNullable =
-            isNull ||
-            (['insertable', 'updateable'].includes(op) &&
-              (hasDefaultValue || isGenerated)) ||
-            (op === 'updateable' && !isNull && !hasDefaultValue)
-          return shouldBeNullable
-            ? kyselyOverrideType.includes('| null')
-              ? kyselyOverrideType
-              : `${kyselyOverrideType} | null`
-            : kyselyOverrideType
+          // @kysely magic comment completely overrides the previous type
+          // No additional nullability modifications
+          return kyselyOverrideType
         }
       }
       
@@ -72,18 +65,9 @@ export function getType(
     if (isKyselyDestination && config.magicComments) {
       const kyselyOverrideType = extractKyselyExpression(Comment)
       if (kyselyOverrideType) {
-        const shouldBeNullable =
-          isNull ||
-          (['insertable', 'updateable'].includes(op) &&
-            (hasDefaultValue || isGenerated)) ||
-          (op === 'updateable' && !isNull && !hasDefaultValue)
-
-        // Check if the override type already includes "| null" to avoid duplication
-        return shouldBeNullable
-          ? kyselyOverrideType.includes('| null')
-            ? kyselyOverrideType
-            : `${kyselyOverrideType} | null`
-          : kyselyOverrideType
+        // @kysely magic comment completely overrides the previous type
+        // No additional nullability modifications
+        return kyselyOverrideType
       }
     }
 
@@ -91,17 +75,9 @@ export function getType(
     if ((isTsDestination || isKyselyDestination) && config.magicComments) {
       const tsOverrideType = extractTSExpression(Comment)
       if (tsOverrideType) {
-        const shouldBeNullable =
-          isNull ||
-          (['insertable', 'updateable'].includes(op) &&
-            (hasDefaultValue || isGenerated)) ||
-          (op === 'updateable' && !isNull && !hasDefaultValue)
-
-        return shouldBeNullable
-          ? tsOverrideType.includes('| null')
-            ? tsOverrideType
-            : `${tsOverrideType} | null`
-          : tsOverrideType
+        // @ts magic comment completely overrides the previous type
+        // No additional nullability modifications
+        return tsOverrideType
       }
     }
   }
@@ -110,62 +86,9 @@ export function getType(
   if (isZodDestination && config.magicComments) {
     const zodOverrideType = extractZodExpression(Comment)
     if (zodOverrideType) {
-      const shouldBeNullable = isNull
-      const shouldBeOptional =
-        (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
-        (op === 'updateable')
-
-      const nullishOption = (destination as any).nullish
-      // For selectable schemas, always use .nullable() since DB fields are never undefined
-      const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
-
-      let finalType = zodOverrideType
-
-      // Apply nullability and optionality correctly
-      if (shouldBeNullable && shouldBeOptional) {
-        // Field is both nullable and optional
-        if (!zodOverrideType.includes(`.${nullableMethod}()`) &&
-            !zodOverrideType.includes('.optional()')) {
-          finalType = `${zodOverrideType}.${nullableMethod}()`
-        }
-      } else if (shouldBeNullable) {
-        // Field is nullable but required
-        if (!zodOverrideType.includes(`.${nullableMethod}()`) &&
-            !zodOverrideType.includes('.optional()')) {
-          finalType = `${zodOverrideType}.${nullableMethod}()`
-        }
-      } else if (shouldBeOptional) {
-        // Field is optional but not nullable
-        if (!zodOverrideType.includes('.optional()') &&
-            !zodOverrideType.includes(`.${nullableMethod}()`)) {
-          finalType = `${zodOverrideType}.optional()`
-        }
-      }
-
-      // Apply default value if field has explicit default (not auto-generated)
-      // Note: selectable schemas should NOT have .default() because when selecting from DB,
-      // you always get a value (either user-provided or DB default)
-      if ((op === 'table' || op === 'insertable') &&
-          hasDefaultValue && Default !== null && !isGenerated) {
-        // Format default value appropriately
-        let defaultValueFormatted = Default
-
-        // Handle different types of default values
-        if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
-          defaultValueFormatted = `'${Default}'`
-        } else if (typeMappings.booleanTypes.includes(type)) {
-          defaultValueFormatted = Default.toLowerCase() === 'true' ? 'true' : 'false'
-        } else if (typeMappings.numberTypes.includes(type)) {
-          defaultValueFormatted = Default
-        } else {
-          // For other types, wrap in quotes
-          defaultValueFormatted = `'${Default}'`
-        }
-
-        finalType = `${finalType}.default(${defaultValueFormatted})`
-      }
-
-      return finalType
+      // @zod magic comment completely overrides the previous type
+      // No additional nullability, optionality, or default value modifications
+      return zodOverrideType
     }
   }
 
