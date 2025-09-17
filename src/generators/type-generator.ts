@@ -116,7 +116,8 @@ export function getType(
         (op === 'updateable')
 
       const nullishOption = (destination as any).nullish
-      const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+      // For selectable schemas, always use .nullable() since DB fields are never undefined
+      const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
 
       let finalType = zodOverrideType
 
@@ -180,7 +181,8 @@ export function getType(
 
     if (isZodDestination) {
       const nullishOption = (destination as any).nullish
-      const nullableMethod = nullishOption ? 'nullish' : 'nullable'
+      // For selectable schemas, always use .nullable() since DB fields are never undefined
+      const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
       return shouldBeNullable ? `${overrideType}.${nullableMethod}()` : overrideType
     } else {
       return shouldBeNullable ? `${overrideType} | null` : overrideType
@@ -220,6 +222,8 @@ export function getType(
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(',')}])`
         const nullishOption = (destination as any).nullish
+        // For selectable schemas, always use .nullable() since DB fields are never undefined
+        const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
 
         // Handle default values for main and insertable schemas (NOT selectable)
         // Note: selectable schemas should NOT have .default() because when selecting from DB,
@@ -227,7 +231,6 @@ export function getType(
         if ((op === 'table' || op === 'insertable') && hasDefaultValue && Default !== null && !isGenerated) {
           // Field has an explicit default value (not auto-generated)
           if (shouldBeNullable) {
-            const nullableMethod = nullishOption ? 'nullish' : 'nullable'
             return `${enumString}.${nullableMethod}().default('${Default}')`
           } else {
             return `${enumString}.default('${Default}')`
@@ -236,11 +239,9 @@ export function getType(
 
         if (shouldBeNullable && shouldBeOptional) {
           // Field is both nullable and optional
-          const nullableMethod = nullishOption ? 'nullish' : 'nullable'
           return `${enumString}.${nullableMethod}()`
         } else if (shouldBeNullable) {
           // Field is nullable but required
-          const nullableMethod = nullishOption ? 'nullish' : 'nullable'
           return `${enumString}.${nullableMethod}()`
         } else if (shouldBeOptional) {
           // Field is optional but not nullable (auto-generated fields)
@@ -361,6 +362,10 @@ function generateStandardType(
 
   // Apply nullability and optionality
   if (isZodDestination) {
+    const nullishOption = (destination as any).nullish
+    // For selectable schemas, always use .nullable() since DB fields are never undefined
+    const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
+
     // Handle default values for main and insertable schemas (NOT selectable)
     // Note: selectable schemas should NOT have .default() because when selecting from DB,
     // you always get a value (either user-provided or DB default)
@@ -382,8 +387,6 @@ function generateStandardType(
       }
 
       if (shouldBeNullable) {
-        const nullishOption = (destination as any).nullish
-        const nullableMethod = nullishOption ? 'nullish' : 'nullable'
         return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`
       } else {
         return `${baseType}.default(${defaultValueFormatted})`
@@ -392,13 +395,9 @@ function generateStandardType(
 
     if (shouldBeNullable && shouldBeOptional) {
       // Field is both nullable and optional
-      const nullishOption = (destination as any).nullish
-      const nullableMethod = nullishOption ? 'nullish' : 'nullable'
       return `${baseType}.${nullableMethod}()`
     } else if (shouldBeNullable) {
       // Field is nullable but required
-      const nullishOption = (destination as any).nullish
-      const nullableMethod = nullishOption ? 'nullish' : 'nullable'
       return `${baseType}.${nullableMethod}()`
     } else if (shouldBeOptional) {
       // Field is optional but not nullable (auto-generated fields)

@@ -246,7 +246,7 @@ function getType(op, desc, config, destination) {
       const shouldBeNullable = isNull;
       const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
       const nullishOption = destination.nullish;
-      const nullableMethod = nullishOption ? "nullish" : "nullable";
+      const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
       let finalType = zodOverrideType;
       if (shouldBeNullable && shouldBeOptional) {
         if (!zodOverrideType.includes(`.${nullableMethod}()`) && !zodOverrideType.includes(".optional()")) {
@@ -283,7 +283,7 @@ function getType(op, desc, config, destination) {
     const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
     if (isZodDestination) {
       const nullishOption = destination.nullish;
-      const nullableMethod = nullishOption ? "nullish" : "nullable";
+      const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
       return shouldBeNullable ? `${overrideType}.${nullableMethod}()` : overrideType;
     } else {
       return shouldBeNullable ? `${overrideType} | null` : overrideType;
@@ -310,19 +310,17 @@ function getType(op, desc, config, destination) {
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
         const nullishOption = destination.nullish;
+        const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
         if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
           if (shouldBeNullable) {
-            const nullableMethod = nullishOption ? "nullish" : "nullable";
             return `${enumString}.${nullableMethod}().default('${Default}')`;
           } else {
             return `${enumString}.default('${Default}')`;
           }
         }
         if (shouldBeNullable && shouldBeOptional) {
-          const nullableMethod = nullishOption ? "nullish" : "nullable";
           return `${enumString}.${nullableMethod}()`;
         } else if (shouldBeNullable) {
-          const nullableMethod = nullishOption ? "nullish" : "nullable";
           return `${enumString}.${nullableMethod}()`;
         } else if (shouldBeOptional) {
           return `${enumString}.optional()`;
@@ -412,6 +410,8 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     baseType = isZodDestination ? "z.string()" : "string";
   }
   if (isZodDestination) {
+    const nullishOption = destination.nullish;
+    const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
     if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
       let defaultValueFormatted = Default;
       if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
@@ -424,20 +424,14 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
         defaultValueFormatted = `'${Default}'`;
       }
       if (shouldBeNullable) {
-        const nullishOption = destination.nullish;
-        const nullableMethod = nullishOption ? "nullish" : "nullable";
         return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`;
       } else {
         return `${baseType}.default(${defaultValueFormatted})`;
       }
     }
     if (shouldBeNullable && shouldBeOptional) {
-      const nullishOption = destination.nullish;
-      const nullableMethod = nullishOption ? "nullish" : "nullable";
       return `${baseType}.${nullableMethod}()`;
     } else if (shouldBeNullable) {
-      const nullishOption = destination.nullish;
-      const nullableMethod = nullishOption ? "nullish" : "nullable";
       return `${baseType}.${nullableMethod}()`;
     } else if (shouldBeOptional) {
       return `${baseType}.optional()`;
@@ -892,7 +886,24 @@ function extractPrismaEntities(config) {
     if (prismaEnum && "name" in prismaEnum && "enumerators" in prismaEnum) {
       const enumName = prismaEnum.name;
       const enumerators = prismaEnum.enumerators;
-      enumDeclarations[enumName] = enumerators.map((e) => e.name);
+      enumDeclarations[enumName] = enumerators.map((e) => {
+        if ("attributes" in e && e.attributes) {
+          const mapAttr = e.attributes.find((attr) => attr.name === "map");
+          if (mapAttr && mapAttr.args && mapAttr.args.length > 0) {
+            const mapValue = mapAttr.args[0];
+            if (typeof mapValue === "object" && "value" in mapValue) {
+              let cleanValue = String(mapValue.value);
+              if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
+                cleanValue = cleanValue.slice(1, -1);
+              }
+              return cleanValue;
+            } else if (typeof mapValue === "string") {
+              return mapValue;
+            }
+          }
+        }
+        return e.name;
+      });
     }
   }
   return { tables, views, enumDeclarations };
@@ -957,8 +968,8 @@ function extractPrismaColumnDescriptions(config, entityName, enumDeclarations) {
       Extra: defaultGenerated ? "auto_increment" : "",
       Null: isOptional ? "YES" : "NO",
       Type: fieldType,
-      Comment: "",
-      // Prisma doesn't have column comments in the same way
+      Comment: field.comment || "",
+      // Extract comment from Prisma field
       EnumOptions: enumOptions
     };
   });

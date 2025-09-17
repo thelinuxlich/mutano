@@ -47,7 +47,27 @@ export function extractPrismaEntities(config: Config): {
     if (prismaEnum && 'name' in prismaEnum && 'enumerators' in prismaEnum) {
       const enumName = prismaEnum.name
       const enumerators = prismaEnum.enumerators as Enumerator[]
-      enumDeclarations[enumName] = enumerators.map((e) => e.name)
+      enumDeclarations[enumName] = enumerators.map((e) => {
+        // Check for @map attribute
+        if ('attributes' in e && e.attributes) {
+          const mapAttr = e.attributes.find((attr: Attribute) => attr.name === 'map')
+          if (mapAttr && mapAttr.args && mapAttr.args.length > 0) {
+            const mapValue = mapAttr.args[0]
+            if (typeof mapValue === 'object' && 'value' in mapValue) {
+              // Remove quotes if present
+              let cleanValue = String(mapValue.value)
+              if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
+                cleanValue = cleanValue.slice(1, -1)
+              }
+              return cleanValue
+            } else if (typeof mapValue === 'string') {
+              return mapValue
+            }
+          }
+        }
+        // Fallback to enum name if no @map
+        return e.name
+      })
     }
   }
 
@@ -142,7 +162,7 @@ export function extractPrismaColumnDescriptions(
       Extra: defaultGenerated ? 'auto_increment' : '',
       Null: isOptional ? 'YES' : 'NO',
       Type: fieldType,
-      Comment: '', // Prisma doesn't have column comments in the same way
+      Comment: field.comment || '', // Extract comment from Prisma field
       EnumOptions: enumOptions,
     }
   })
