@@ -48,20 +48,20 @@ model Product {
       const productContent = result['Product.zod.ts']
       console.log('Generated decimal validation content:', productContent)
       
-      // Main schema should have decimal fields with .trim().min(1)
+      // Main schema should have decimal fields with .trim().min(1) only if no default
       expect(productContent).toContain("price: z.string().trim().min(1)")
       expect(productContent).toContain("discount: z.string().trim().min(1).nullable()")
-      expect(productContent).toContain("weight: z.string().trim().min(1).default('0.0')")
+      expect(productContent).toContain("weight: z.string().trim().default('0.0')") // Has default, should NOT have .min(1)
       
-      // Insertable schema should have decimal fields with .trim().min(1)
+      // Insertable schema should have decimal fields with .trim().min(1) only if no default
       expect(productContent).toMatch(/insertable_product[^}]+price:\s*z\.string\(\)\.trim\(\)\.min\(1\)/)
       expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.nullable\(\)/)
-      expect(productContent).toMatch(/insertable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)\.default\('0\.0'\)/)
-      
-      // Updateable schema should have decimal fields with .trim().min(1)
+      expect(productContent).toMatch(/insertable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('0\.0'\)/) // Has default, should NOT have .min(1)
+
+      // Updateable schema should have decimal fields with .trim().min(1) only if no default
       expect(productContent).toMatch(/updateable_product[^}]+price:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)/)
       expect(productContent).toMatch(/updateable_product[^}]+discount:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.nullable\(\)/)
-      expect(productContent).toMatch(/updateable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)\.default\('0\.0'\)/)
+      expect(productContent).toMatch(/updateable_product[^}]+weight:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('0\.0'\)/) // Has default, should NOT have .min(1)
       
       // Selectable schema should NOT have .trim().min(1) (data from DB is already validated)
       expect(productContent).toMatch(/selectable_product[^}]+price:\s*z\.string\(\)(?!\.trim)/)

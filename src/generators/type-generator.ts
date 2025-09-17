@@ -339,7 +339,11 @@ function generateStandardType(
       // Only apply validation modifiers to input schemas, not selectable schemas
       // Selectable schemas represent data from DB which is already validated/stored
       if (op !== 'selectable') {
-        baseType += '.trim().min(1)'
+        baseType += '.trim()'
+        // For decimal fields with default values, don't add .min(1) validation
+        if (!hasDefaultValue) {
+          baseType += '.min(1)'
+        }
       }
     } else if (isKyselyDestination) {
       baseType = 'Decimal'

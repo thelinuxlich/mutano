@@ -134,9 +134,9 @@ model Product {
       expect(productContent).toContain("description: z.string().trim().default('No description')")
       expect(productContent).toContain("category: z.string().trim().default('General')")
       
-      // Decimal fields should always have .trim().min(1) regardless of default
+      // Decimal fields should have .trim().min(1) only if no default (NEW BEHAVIOR)
       expect(productContent).toContain("price: z.string().trim().min(1)")
-      expect(productContent).toContain("discount: z.string().trim().min(1).default('0.00')")
+      expect(productContent).toContain("discount: z.string().trim().default('0.00')") // Has default, should NOT have .min(1)
       
       // Verify string fields with defaults do NOT have .min(1)
       expect(productContent).not.toMatch(/description:\s*z\.string\(\)\.trim\(\)\.min\(1\)/)

@@ -385,7 +385,10 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     if (isZodDestination) {
       baseType = "z.string()";
       if (op !== "selectable") {
-        baseType += ".trim().min(1)";
+        baseType += ".trim()";
+        if (!hasDefaultValue) {
+          baseType += ".min(1)";
+        }
       }
     } else if (isKyselyDestination) {
       baseType = "Decimal";
