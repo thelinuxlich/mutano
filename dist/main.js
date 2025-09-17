@@ -388,9 +388,6 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   } else if (typeMappings.numberTypes.includes(type)) {
     if (isZodDestination) {
       baseType = "z.number()";
-      if (!shouldBeNullable && !hasDefaultValue) {
-        baseType += ".nonnegative()";
-      }
     } else {
       baseType = "number";
     }

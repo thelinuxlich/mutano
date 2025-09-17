@@ -67,28 +67,28 @@ describe('Table Magic Comments', () => {
 
     // Check main schema
     expect(content).toContain('export const user = z.object({')
-    expect(content).toContain('id: z.number().nonnegative()')
+    expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
     expect(content).toContain('email: z.string().email().min(5).max(100)')
     expect(content).toContain('score: z.number().min(0).max(100).nullable()')
     expect(content).toContain('metadata: z.record(z.string()).nullable().default(\'{}\')')
 
     // Check insertable schema
     expect(content).toContain('export const insertable_user = z.object({')
-    expect(content).toContain('id: z.number().nonnegative().optional()')
+    expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
     expect(content).toContain('email: z.string().email().min(5).max(100)')
     expect(content).toContain('score: z.number().min(0).max(100).nullable()')
     expect(content).toContain('metadata: z.record(z.string()).nullable().default(\'{}\')')
 
     // Check updateable schema
     expect(content).toContain('export const updateable_user = z.object({')
-    expect(content).toContain('id: z.number().nonnegative().optional()')
+    expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
     expect(content).toContain('email: z.string().email().min(5).max(100).optional()')
     expect(content).toContain('score: z.number().min(0).max(100).nullable()')
     expect(content).toContain('metadata: z.record(z.string()).nullable()')
 
     // Check selectable schema
     expect(content).toContain('export const selectable_user = z.object({')
-    expect(content).toContain('id: z.number().nonnegative()')
+    expect(content).toContain('id: z.number().optional()')  // No .nonnegative()
     expect(content).toContain('email: z.string().email().min(5).max(100)')
     expect(content).toContain('score: z.number().min(0).max(100).nullable()')
     expect(content).toContain('metadata: z.record(z.string()).nullable()')

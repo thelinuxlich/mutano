@@ -290,7 +290,7 @@ model Account {
     console.log('Generated mixed types default content:', accountContent)
     
     // Insertable should have proper defaults for all types (snake_case naming)
-    expect(accountContent).toMatch(/insertable_account[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/) // Auto-increment
+    expect(accountContent).toMatch(/insertable_account[^}]+id:\s*z\.number\(\)\.optional\(\)/) // Auto-increment, no .nonnegative()
     expect(accountContent).toContain("username: z.string().default('user')") // String default
     expect(accountContent).toContain("balance: z.number().default(0.0)") // Number default
     expect(accountContent).toContain("isVerified: z.boolean().default(false)") // Boolean default
@@ -349,7 +349,7 @@ model Task {
 
     // Main schema should have defaults for all fields with @default (except auto-generated) - snake_case naming
     expect(taskContent).toContain("export const task = z.object({")  // snake_case
-    expect(taskContent).toContain("id: z.number().nonnegative()")  // Auto-increment, no default
+    expect(taskContent).toContain("id: z.number().optional()")  // Auto-increment, no default, no .nonnegative()
     expect(taskContent).toContain("title: z.string().default('New Task')")  // String default
     expect(taskContent).toContain("priority: z.enum(['LOW','HIGH']).default('LOW')")  // Enum default
     expect(taskContent).toContain("done: z.boolean().default(false)")  // Boolean default
@@ -357,7 +357,7 @@ model Task {
 
     // Insertable schema should have same defaults plus optional auto-generated fields - snake_case naming
     expect(taskContent).toContain("export const insertable_task = z.object({")  // snake_case
-    expect(taskContent).toContain("id: z.number().nonnegative().optional()")  // Auto-increment, optional
+    expect(taskContent).toContain("id: z.number().optional()")  // Auto-increment, optional, no .nonnegative()
     expect(taskContent).toContain("title: z.string().default('New Task')")  // String default
     expect(taskContent).toContain("priority: z.enum(['LOW','HIGH']).default('LOW')")  // Enum default
     expect(taskContent).toContain("done: z.boolean().default(false)")  // Boolean default
@@ -365,7 +365,7 @@ model Task {
 
     // Selectable schema should ALSO have defaults - snake_case naming
     expect(taskContent).toContain("export const selectable_task = z.object({")  // snake_case
-    expect(taskContent).toContain("id: z.number().nonnegative()")  // Auto-increment, no default
+    expect(taskContent).toContain("id: z.number().optional()")  // Auto-increment, no default, no .nonnegative()
     expect(taskContent).toContain("title: z.string().default('New Task')")  // String default with default!
     expect(taskContent).toContain("priority: z.enum(['LOW','HIGH']).default('LOW')")  // Enum default with default!
     expect(taskContent).toContain("done: z.boolean().default(false)")  // Boolean default with default!

@@ -346,7 +346,7 @@ describe('mutano with SQLite', () => {
 		}
 
 		expect(fileContents['posts.schema.ts']).toContain('z.string().trim()')
-		expect(fileContents['users.schema.ts']).toContain('z.number().nonnegative()')
+		expect(fileContents['users.schema.ts']).toContain('z.number()')  // No .nonnegative()
 	})
 
 	test('should generate content for all destination types', () => {

@@ -201,7 +201,7 @@ describe('mutano', () => {
 
 			expect(content).toContain("import { z } from 'zod/v4';")
 			expect(content).toContain('export const user = z.object({')
-			expect(content).toContain('id: z.number().nonnegative().optional(),')  // autoincrement ID should be optional
+			expect(content).toContain('id: z.number().optional(),')  // autoincrement ID should be optional, no .nonnegative()
 			expect(content).toContain('name: z.string().min(1),')
 		})
 

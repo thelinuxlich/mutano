@@ -287,7 +287,7 @@ model Record {
     expect(recordContent).toContain("type: z.enum(['SYSTEM','USER'])")
     
     // Insertable should have optional id (auto-generated) and default type (has @default(USER)) - snake_case naming
-    expect(recordContent).toMatch(/insertable_record[^}]+id:\s*z\.number\(\)\.nonnegative\(\)\.optional\(\)/)
+    expect(recordContent).toMatch(/insertable_record[^}]+id:\s*z\.number\(\)\.optional\(\)/)  // No .nonnegative()
     expect(recordContent).toMatch(/insertable_record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.default\('USER'\)/)
   })
 })

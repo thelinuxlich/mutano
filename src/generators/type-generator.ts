@@ -337,9 +337,7 @@ function generateStandardType(
   } else if (typeMappings.numberTypes.includes(type)) {
     if (isZodDestination) {
       baseType = 'z.number()'
-      if (!shouldBeNullable && !hasDefaultValue) {
-        baseType += '.nonnegative()'
-      }
+      // Removed automatic .nonnegative() - integers can be negative
     } else {
       baseType = 'number'
     }
