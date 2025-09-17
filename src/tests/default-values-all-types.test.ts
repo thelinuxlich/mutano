@@ -228,10 +228,11 @@ model Post {
     expect(postContent).toContain("updatedAt: z.date().optional()")  // Auto-generated, should be optional
     expect(postContent).toContain("publishedAt: z.date().nullable()")  // No default
     
-    // Insertable should handle auto-generated dates as optional (snake_case naming)
-    expect(postContent).toMatch(/insertable_post[^}]+createdAt:\s*z\.date\(\)\.optional\(\)/) // now() is auto-generated
-    expect(postContent).toMatch(/insertable_post[^}]+updatedAt:\s*z\.date\(\)\.optional\(\)/) // @updatedAt is auto-generated
-    expect(postContent).toMatch(/insertable_post[^}]+publishedAt:\s*z\.date\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
+    // ✅ FIXED: Insertable should exclude auto-generated datetime fields
+    expect(postContent).toContain('insertable_post')
+    expect(postContent).not.toMatch(/insertable_post[^}]+createdAt:/) // Auto-generated, should be excluded
+    expect(postContent).not.toMatch(/insertable_post[^}]+updatedAt:/) // Auto-generated, should be excluded
+    expect(postContent).toMatch(/insertable_post[^}]+publishedAt:\s*z\.date\(\)\.nullable\(\)(?!\.(optional|default))/) // Manual field, should be included
 
     // Selectable should also have .optional() for auto-generated dates
     expect(postContent).toMatch(/selectable_post[^}]+createdAt:\s*z\.date\(\)\.optional\(\)/) // now() is auto-generated
