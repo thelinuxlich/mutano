@@ -223,15 +223,20 @@ model Post {
     
     console.log('Generated DateTime default content:', postContent)
     
-    // Main schema should NOT have defaults for auto-generated dates
-    expect(postContent).toContain("createdAt: z.date()")  // Auto-generated, no default in main schema
-    expect(postContent).toContain("updatedAt: z.date()")  // Auto-generated, no default in main schema
+    // Main schema should have .optional() for auto-generated dates
+    expect(postContent).toContain("createdAt: z.date().optional()")  // Auto-generated, should be optional
+    expect(postContent).toContain("updatedAt: z.date().optional()")  // Auto-generated, should be optional
     expect(postContent).toContain("publishedAt: z.date().nullable()")  // No default
     
     // Insertable should handle auto-generated dates as optional (snake_case naming)
     expect(postContent).toMatch(/insertable_post[^}]+createdAt:\s*z\.date\(\)\.optional\(\)/) // now() is auto-generated
     expect(postContent).toMatch(/insertable_post[^}]+updatedAt:\s*z\.date\(\)\.optional\(\)/) // @updatedAt is auto-generated
     expect(postContent).toMatch(/insertable_post[^}]+publishedAt:\s*z\.date\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
+
+    // Selectable should also have .optional() for auto-generated dates
+    expect(postContent).toMatch(/selectable_post[^}]+createdAt:\s*z\.date\(\)\.optional\(\)/) // now() is auto-generated
+    expect(postContent).toMatch(/selectable_post[^}]+updatedAt:\s*z\.date\(\)\.optional\(\)/) // @updatedAt is auto-generated
+    expect(postContent).toMatch(/selectable_post[^}]+publishedAt:\s*z\.date\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
   })
 
   test('should handle mixed data types with defaults correctly', async () => {

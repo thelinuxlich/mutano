@@ -393,14 +393,28 @@ function generateStandardType(
       }
     }
 
+    // Special handling for date/datetime fields in main and selectable schemas
+    const isDateField = typeMappings.dateTypes.includes(type)
+    const shouldDateBeOptional = isDateField && (hasDefaultValue || isGenerated) && (op === 'table' || op === 'selectable')
+
+    // Special handling for ID fields with autoincrement/auto-generation in main and selectable schemas
+    const isIdField = typeMappings.numberTypes.includes(type) || typeMappings.bigIntTypes.includes(type) || typeMappings.stringTypes.includes(type)
+    const shouldIdBeOptional = isIdField && isGenerated && (op === 'table' || op === 'selectable')
+
     if (shouldBeNullable && shouldBeOptional) {
       // Field is both nullable and optional
       return `${baseType}.${nullableMethod}()`
     } else if (shouldBeNullable) {
       // Field is nullable but required
+      if (shouldDateBeOptional || shouldIdBeOptional) {
+        return `${baseType}.${nullableMethod}().optional()`
+      }
       return `${baseType}.${nullableMethod}()`
     } else if (shouldBeOptional) {
       // Field is optional but not nullable (auto-generated fields)
+      return `${baseType}.optional()`
+    } else if (shouldDateBeOptional || shouldIdBeOptional) {
+      // Date field with default/auto-generated or ID field with autoincrement in main or selectable schema
       return `${baseType}.optional()`
     } else {
       // Field is required and not nullable

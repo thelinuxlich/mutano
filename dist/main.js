@@ -429,11 +429,20 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
         return `${baseType}.default(${defaultValueFormatted})`;
       }
     }
+    const isDateField = typeMappings.dateTypes.includes(type);
+    const shouldDateBeOptional = isDateField && (hasDefaultValue || isGenerated) && (op === "table" || op === "selectable");
+    const isIdField = typeMappings.numberTypes.includes(type) || typeMappings.bigIntTypes.includes(type) || typeMappings.stringTypes.includes(type);
+    const shouldIdBeOptional = isIdField && isGenerated && (op === "table" || op === "selectable");
     if (shouldBeNullable && shouldBeOptional) {
       return `${baseType}.${nullableMethod}()`;
     } else if (shouldBeNullable) {
+      if (shouldDateBeOptional || shouldIdBeOptional) {
+        return `${baseType}.${nullableMethod}().optional()`;
+      }
       return `${baseType}.${nullableMethod}()`;
     } else if (shouldBeOptional) {
+      return `${baseType}.optional()`;
+    } else if (shouldDateBeOptional || shouldIdBeOptional) {
       return `${baseType}.optional()`;
     } else {
       return baseType;
