@@ -350,8 +350,10 @@ function generateStandardType(
       const useTrim = (destination as any).useTrim
       const requiredString = (destination as any).requiredString
       baseType = 'z.string()'
-      if (useTrim) baseType += '.trim()'
-      if (requiredString && !shouldBeNullable) baseType += '.min(1)'
+      // Only apply validation modifiers to input schemas, not selectable schemas
+      // Selectable schemas represent data from DB which is already validated/stored
+      if (useTrim && op !== 'selectable') baseType += '.trim()'
+      if (requiredString && !shouldBeNullable && op !== 'selectable') baseType += '.min(1)'
     } else {
       baseType = 'string'
     }

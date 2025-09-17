@@ -401,8 +401,8 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
       const useTrim = destination.useTrim;
       const requiredString = destination.requiredString;
       baseType = "z.string()";
-      if (useTrim) baseType += ".trim()";
-      if (requiredString && !shouldBeNullable) baseType += ".min(1)";
+      if (useTrim && op !== "selectable") baseType += ".trim()";
+      if (requiredString && !shouldBeNullable && op !== "selectable") baseType += ".min(1)";
     } else {
       baseType = "string";
     }
