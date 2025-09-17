@@ -372,9 +372,9 @@ function generateStandardType(
       // Only apply validation modifiers to input schemas, not selectable schemas
       // Selectable schemas represent data from DB which is already validated/stored
       if (useTrim && op !== 'selectable') baseType += '.trim()'
-      // For updateable schemas with default values, don't add .min(1) validation
+      // For string fields with default values, don't add .min(1) validation
       if (requiredString && !shouldBeNullable && op !== 'selectable' &&
-          !(op === 'updateable' && hasDefaultValue)) baseType += '.min(1)'
+          !hasDefaultValue) baseType += '.min(1)'
     } else {
       baseType = 'string'
     }

@@ -55,12 +55,12 @@ model User {
     // ✅ FIXED: Updateable schema should still have .min(1) for fields WITHOUT defaults
     expect(userContent).toMatch(/updateable_user[^}]+email:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)/)
     
-    // ✅ VERIFIED: Main schema should still have .min(1) for all required strings
-    expect(userContent).toMatch(/export const user[^}]+name:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.default\('Anonymous'\)/)
+    // ✅ FIXED: Main schema should NOT have .min(1) for strings with defaults
+    expect(userContent).toMatch(/export const user[^}]+name:\s*z\.string\(\)\.trim\(\)\.default\('Anonymous'\)/)
     expect(userContent).toMatch(/export const user[^}]+email:\s*z\.string\(\)\.trim\(\)\.min\(1\)/)
-    
-    // ✅ VERIFIED: Insertable schema should still have .min(1) for required strings
-    expect(userContent).toMatch(/insertable_user[^}]+name:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.optional\(\)\.default\('Anonymous'\)/)
+
+    // ✅ FIXED: Insertable schema should NOT have .min(1) for strings with defaults
+    expect(userContent).toMatch(/insertable_user[^}]+name:\s*z\.string\(\)\.trim\(\)\.optional\(\)\.default\('Anonymous'\)/)
     expect(userContent).toMatch(/insertable_user[^}]+email:\s*z\.string\(\)\.trim\(\)\.min\(1\)/)
     
     // ✅ VERIFIED: Selectable schema should NOT have validation modifiers
