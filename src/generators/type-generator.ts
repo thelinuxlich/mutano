@@ -225,13 +225,19 @@ export function getType(
         // For selectable schemas, always use .nullable() since DB fields are never undefined
         const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
 
-        // Handle default values for main and insertable schemas (NOT selectable)
+        // Handle default values for main, insertable, and updateable schemas (NOT selectable)
         // Note: selectable schemas should NOT have .default() because when selecting from DB,
         // you always get a value (either user-provided or DB default)
-        if ((op === 'table' || op === 'insertable') && hasDefaultValue && Default !== null && !isGenerated) {
+        if ((op === 'table' || op === 'insertable' || op === 'updateable') && hasDefaultValue && Default !== null && !isGenerated) {
           // Field has an explicit default value (not auto-generated)
-          if (shouldBeNullable) {
+          if (shouldBeNullable && shouldBeOptional) {
+            // For updateable: nullable and optional with default at the end
             return `${enumString}.${nullableMethod}().default('${Default}')`
+          } else if (shouldBeNullable) {
+            return `${enumString}.${nullableMethod}().default('${Default}')`
+          } else if (shouldBeOptional) {
+            // For updateable: optional with default at the end
+            return `${enumString}.optional().default('${Default}')`
           } else {
             return `${enumString}.default('${Default}')`
           }
@@ -351,7 +357,9 @@ function generateStandardType(
       // Only apply validation modifiers to input schemas, not selectable schemas
       // Selectable schemas represent data from DB which is already validated/stored
       if (useTrim && op !== 'selectable') baseType += '.trim()'
-      if (requiredString && !shouldBeNullable && op !== 'selectable') baseType += '.min(1)'
+      // For updateable schemas with default values, don't add .min(1) validation
+      if (requiredString && !shouldBeNullable && op !== 'selectable' &&
+          !(op === 'updateable' && hasDefaultValue)) baseType += '.min(1)'
     } else {
       baseType = 'string'
     }
@@ -366,10 +374,10 @@ function generateStandardType(
     // For selectable schemas, always use .nullable() since DB fields are never undefined
     const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
 
-    // Handle default values for main and insertable schemas (NOT selectable)
+    // Handle default values for main, insertable, and updateable schemas (NOT selectable)
     // Note: selectable schemas should NOT have .default() because when selecting from DB,
     // you always get a value (either user-provided or DB default)
-    if ((op === 'table' || op === 'insertable') && hasDefaultValue && Default !== null && !isGenerated) {
+    if ((op === 'table' || op === 'insertable' || op === 'updateable') && hasDefaultValue && Default !== null && !isGenerated) {
       // Field has an explicit default value (not auto-generated)
       // For non-enum types, we need to format the default value appropriately
       let defaultValueFormatted = Default
@@ -386,8 +394,14 @@ function generateStandardType(
         defaultValueFormatted = `'${Default}'`
       }
 
-      if (shouldBeNullable) {
+      if (shouldBeNullable && shouldBeOptional) {
+        // For updateable: nullable and optional with default at the end
         return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`
+      } else if (shouldBeNullable) {
+        return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`
+      } else if (shouldBeOptional) {
+        // For updateable: optional with default at the end
+        return `${baseType}.optional().default(${defaultValueFormatted})`
       } else {
         return `${baseType}.default(${defaultValueFormatted})`
       }

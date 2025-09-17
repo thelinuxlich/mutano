@@ -52,7 +52,7 @@ model User {
     expect(userContent).toContain("bio: z.string().nullable().default('No bio provided')")
     
     // Insertable should have defaults for fields with @default (snake_case naming)
-    expect(userContent).toMatch(/insertable_user[^}]+name:\s*z\.string\(\)\.default\('Anonymous'\)/)
+    expect(userContent).toMatch(/insertable_user[^}]+name:\s*z\.string\(\)\.optional\(\)\.default\('Anonymous'\)/)
     expect(userContent).toMatch(/insertable_user[^}]+email:\s*z\.string\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
     expect(userContent).toMatch(/insertable_user[^}]+bio:\s*z\.string\(\)\.nullable\(\)\.default\('No bio provided'\)/)
 
@@ -110,8 +110,8 @@ model Product {
     expect(productContent).toContain("discount: z.number().nullable().default(0)")
 
     // Insertable should have defaults for fields with @default (snake_case naming)
-    expect(productContent).toMatch(/insertable_product[^}]+price:\s*z\.number\(\)\.default\(0\.0\)/)
-    expect(productContent).toMatch(/insertable_product[^}]+quantity:\s*z\.number\(\)\.default\(1\)/)
+    expect(productContent).toMatch(/insertable_product[^}]+price:\s*z\.number\(\)\.optional\(\)\.default\(0\.0\)/)
+    expect(productContent).toMatch(/insertable_product[^}]+quantity:\s*z\.number\(\)\.optional\(\)\.default\(1\)/)
     expect(productContent).toMatch(/insertable_product[^}]+rating:\s*z\.number\(\)\.nullable\(\)(?!\.(optional|default))/) // Nullable, no default
     expect(productContent).toMatch(/insertable_product[^}]+discount:\s*z\.number\(\)\.nullable\(\)\.default\(0\)/)
 
@@ -170,8 +170,8 @@ model Settings {
     expect(settingsContent).toContain("darkMode: z.boolean().nullable().default(true)")
 
     // Insertable should have defaults for fields with @default (snake_case naming)
-    expect(settingsContent).toMatch(/insertable_settings[^}]+isActive:\s*z\.boolean\(\)\.default\(true\)/)
-    expect(settingsContent).toMatch(/insertable_settings[^}]+isPublic:\s*z\.boolean\(\)\.default\(false\)/)
+    expect(settingsContent).toMatch(/insertable_settings[^}]+isActive:\s*z\.boolean\(\)\.optional\(\)\.default\(true\)/)
+    expect(settingsContent).toMatch(/insertable_settings[^}]+isPublic:\s*z\.boolean\(\)\.optional\(\)\.default\(false\)/)
     expect(settingsContent).toMatch(/insertable_settings[^}]+notifications:\s*z\.boolean\(\)(?!\.(optional|nullable|nullish|default))/) // Required, no default
     expect(settingsContent).toMatch(/insertable_settings[^}]+darkMode:\s*z\.boolean\(\)\.nullable\(\)\.default\(true\)/)
 

@@ -311,9 +311,13 @@ function getType(op, desc, config, destination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
         const nullishOption = destination.nullish;
         const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
-        if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
-          if (shouldBeNullable) {
+        if ((op === "table" || op === "insertable" || op === "updateable") && hasDefaultValue && Default !== null && !isGenerated) {
+          if (shouldBeNullable && shouldBeOptional) {
             return `${enumString}.${nullableMethod}().default('${Default}')`;
+          } else if (shouldBeNullable) {
+            return `${enumString}.${nullableMethod}().default('${Default}')`;
+          } else if (shouldBeOptional) {
+            return `${enumString}.optional().default('${Default}')`;
           } else {
             return `${enumString}.default('${Default}')`;
           }
@@ -399,7 +403,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
       const requiredString = destination.requiredString;
       baseType = "z.string()";
       if (useTrim && op !== "selectable") baseType += ".trim()";
-      if (requiredString && !shouldBeNullable && op !== "selectable") baseType += ".min(1)";
+      if (requiredString && !shouldBeNullable && op !== "selectable" && !(op === "updateable" && hasDefaultValue)) baseType += ".min(1)";
     } else {
       baseType = "string";
     }
@@ -409,7 +413,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   if (isZodDestination) {
     const nullishOption = destination.nullish;
     const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
-    if ((op === "table" || op === "insertable") && hasDefaultValue && Default !== null && !isGenerated) {
+    if ((op === "table" || op === "insertable" || op === "updateable") && hasDefaultValue && Default !== null && !isGenerated) {
       let defaultValueFormatted = Default;
       if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
         defaultValueFormatted = `'${Default}'`;
@@ -420,8 +424,12 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
       } else {
         defaultValueFormatted = `'${Default}'`;
       }
-      if (shouldBeNullable) {
+      if (shouldBeNullable && shouldBeOptional) {
         return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`;
+      } else if (shouldBeNullable) {
+        return `${baseType}.${nullableMethod}().default(${defaultValueFormatted})`;
+      } else if (shouldBeOptional) {
+        return `${baseType}.optional().default(${defaultValueFormatted})`;
       } else {
         return `${baseType}.default(${defaultValueFormatted})`;
       }

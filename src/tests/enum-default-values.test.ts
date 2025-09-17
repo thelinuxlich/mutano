@@ -55,7 +55,7 @@ model Post {
     expect(postContent).toContain("status: z.enum(['DRAFT','PUBLISHED','ARCHIVED'])")
     
     // Insertable should have default value (not just optional) due to @default(DRAFT) - snake_case naming
-    expect(postContent).toMatch(/insertable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
+    expect(postContent).toMatch(/insertable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)\.default\('DRAFT'\)/)
 
     // Updateable should be optional (can be updated or not) - snake_case naming
     expect(postContent).toMatch(/updateable_post[^}]+status:\s*z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)/)
@@ -233,7 +233,7 @@ model Item {
     expect(itemContent).toContain("category: z.enum(['ACTIVE','INACTIVE']).nullish()") // Nullable
     
     // Insertable validations - snake_case naming
-    expect(itemContent).toMatch(/insertable_item[^}]+status:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.default\('ACTIVE'\)/)  // Default value due to @default(ACTIVE)
+    expect(itemContent).toMatch(/insertable_item[^}]+status:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.optional\(\)\.default\('ACTIVE'\)/)  // Default value due to @default(ACTIVE)
     expect(itemContent).toMatch(/insertable_item[^}]+priority:\s*z\.enum\(\['LOW','HIGH'\]\)(?!\.(optional|nullable|nullish|default))/)  // Required (no default)
     expect(itemContent).toMatch(/insertable_item[^}]+category:\s*z\.enum\(\['ACTIVE','INACTIVE'\]\)\.nullish\(\)/)  // Nullish (nullable)
   })
@@ -288,6 +288,6 @@ model Record {
     
     // Insertable should have optional id (auto-generated) and default type (has @default(USER)) - snake_case naming
     expect(recordContent).toMatch(/insertable_record[^}]+id:\s*z\.number\(\)\.optional\(\)/)  // No .nonnegative()
-    expect(recordContent).toMatch(/insertable_record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.default\('USER'\)/)
+    expect(recordContent).toMatch(/insertable_record[^}]+type:\s*z\.enum\(\['SYSTEM','USER'\]\)\.optional\(\)\.default\('USER'\)/)
   })
 })

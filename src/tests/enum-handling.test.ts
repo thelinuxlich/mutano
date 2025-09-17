@@ -231,7 +231,7 @@ model Post {
     // For insertable, should have default value due to @default(DRAFT) - snake_case naming
     const insertableMatch = postContent.match(/export const insertable_post[^}]+status: (z\.enum\([^)]+\)[^,\n]*)/s)
     expect(insertableMatch).toBeTruthy()
-    expect(insertableMatch![1]).toMatch(/z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.default\('DRAFT'\)/)
+    expect(insertableMatch![1]).toMatch(/z\.enum\(\['DRAFT','PUBLISHED','ARCHIVED'\]\)\.optional\(\)\.default\('DRAFT'\)/)
   })
 
   test('should handle Prisma enums with @map attributes correctly', async () => {
