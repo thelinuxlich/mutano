@@ -200,6 +200,12 @@ const extractTypeExpression = (comment, prefix) => {
 const extractTSExpression = (comment) => extractTypeExpression(comment, "@ts(");
 const extractKyselyExpression = (comment) => extractTypeExpression(comment, "@kysely(");
 const extractZodExpression = (comment) => extractTypeExpression(comment, "@zod(");
+const hasIgnoreDirective = (comment) => {
+  return comment.includes("@ignore");
+};
+const hasTableIgnoreDirective = (comment) => {
+  return comment.includes("@@ignore");
+};
 
 function getType(op, desc, config, destination) {
   const { Default, Extra, Null, Type, Comment, EnumOptions } = desc;
@@ -770,23 +776,23 @@ async function extractTables(db, config) {
   switch (origin.type) {
     case "mysql":
       const mysqlTables = await db.raw(`
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name, table_comment
+        FROM information_schema.tables
         WHERE table_schema = ? AND table_type = 'BASE TABLE'
       `, [origin.database]);
-      return mysqlTables[0].map((row) => row.table_name);
+      return mysqlTables[0].filter((row) => !hasTableIgnoreDirective(row.table_comment || "")).map((row) => row.table_name);
     case "postgres":
       const schema = origin.schema || "public";
       const postgresTables = await db.raw(`
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name
+        FROM information_schema.tables
         WHERE table_schema = ? AND table_type = 'BASE TABLE'
       `, [schema]);
       return postgresTables.rows.map((row) => row.table_name);
     case "sqlite":
       const sqliteTables = await db.raw(`
-        SELECT name 
-        FROM sqlite_master 
+        SELECT name
+        FROM sqlite_master
         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
       `);
       return sqliteTables.map((row) => row.name);
@@ -799,23 +805,23 @@ async function extractViews(db, config) {
   switch (origin.type) {
     case "mysql":
       const mysqlViews = await db.raw(`
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name, table_comment
+        FROM information_schema.tables
         WHERE table_schema = ? AND table_type = 'VIEW'
       `, [origin.database]);
-      return mysqlViews[0].map((row) => row.table_name);
+      return mysqlViews[0].filter((row) => !hasTableIgnoreDirective(row.table_comment || "")).map((row) => row.table_name);
     case "postgres":
       const schema = origin.schema || "public";
       const postgresViews = await db.raw(`
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name
+        FROM information_schema.tables
         WHERE table_schema = ? AND table_type = 'VIEW'
       `, [schema]);
       return postgresViews.rows.map((row) => row.table_name);
     case "sqlite":
       const sqliteViews = await db.raw(`
-        SELECT name 
-        FROM sqlite_master 
+        SELECT name
+        FROM sqlite_master
         WHERE type = 'view'
       `);
       return sqliteViews.map((row) => row.name);
@@ -828,18 +834,18 @@ async function extractColumnDescriptions(db, config, tableName) {
   switch (origin.type) {
     case "mysql":
       const mysqlColumns = await db.raw(`
-        SELECT 
+        SELECT
           column_name as \`Field\`,
           column_default as \`Default\`,
           extra as \`Extra\`,
           is_nullable as \`Null\`,
           column_type as \`Type\`,
           column_comment as \`Comment\`
-        FROM information_schema.columns 
+        FROM information_schema.columns
         WHERE table_schema = ? AND table_name = ?
         ORDER BY ordinal_position
       `, [origin.database, tableName]);
-      return mysqlColumns[0].map((row) => ({
+      return mysqlColumns[0].filter((row) => !hasIgnoreDirective(row.Comment || "")).map((row) => ({
         Field: row.Field,
         Default: row.Default,
         Extra: row.Extra || "",
@@ -850,18 +856,18 @@ async function extractColumnDescriptions(db, config, tableName) {
     case "postgres":
       const schema = origin.schema || "public";
       const postgresColumns = await db.raw(`
-        SELECT 
+        SELECT
           column_name as "Field",
           column_default as "Default",
           '' as "Extra",
           is_nullable as "Null",
           data_type as "Type",
           '' as "Comment"
-        FROM information_schema.columns 
+        FROM information_schema.columns
         WHERE table_schema = ? AND table_name = ?
         ORDER BY ordinal_position
       `, [schema, tableName]);
-      return postgresColumns.rows.map((row) => ({
+      return postgresColumns.rows.filter((row) => !hasIgnoreDirective(row.Comment || "")).map((row) => ({
         Field: row.Field,
         Default: row.Default,
         Extra: row.Extra || "",
@@ -871,7 +877,7 @@ async function extractColumnDescriptions(db, config, tableName) {
       }));
     case "sqlite":
       const sqliteColumns = await db.raw(`PRAGMA table_info(${tableName})`);
-      return sqliteColumns.map((row) => ({
+      return sqliteColumns.filter((row) => !hasIgnoreDirective(row.Comment || "")).map((row) => ({
         Field: row.name,
         Default: row.dflt_value,
         Extra: row.pk ? "PRIMARY KEY" : "",
@@ -891,7 +897,14 @@ function extractPrismaEntities(config) {
   const schemaContent = readFileSync(config.origin.path, "utf-8");
   const schema = createPrismaSchemaBuilder(schemaContent);
   const prismaModels = schema.findAllByType("model", {});
-  const tables = prismaModels.filter((m) => m !== null).map((model) => model.name);
+  const tables = prismaModels.filter((m) => m !== null).filter((model) => {
+    if (model.properties && Array.isArray(model.properties)) {
+      return !model.properties.some(
+        (prop) => prop.type === "attribute" && prop.name === "ignore" && prop.kind === "object"
+      );
+    }
+    return true;
+  }).map((model) => model.name);
   const prismaViews = schema.findAllByType("view", {});
   const views = prismaViews.filter((v) => v !== null).map((view) => view.name);
   const enumDeclarations = {};
@@ -935,8 +948,16 @@ function extractPrismaColumnDescriptions(config, entityName, enumDeclarations) {
   if (!entity || !("properties" in entity)) {
     return [];
   }
+  if (entity.type === "model" && entity.properties && Array.isArray(entity.properties)) {
+    const hasIgnore = entity.properties.some(
+      (prop) => prop.type === "attribute" && prop.name === "ignore" && prop.kind === "object"
+    );
+    if (hasIgnore) {
+      return [];
+    }
+  }
   const fields = entity.properties.filter(
-    (p) => p.type === "field" && p.array !== true && !p.attributes?.find((a) => a.name === "relation")
+    (p) => p.type === "field" && p.array !== true && !p.attributes?.find((a) => a.name === "relation") && !p.attributes?.find((a) => a.name === "ignore")
   );
   return fields.map((field) => {
     let defaultGenerated = false;

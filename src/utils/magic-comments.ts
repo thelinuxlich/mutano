@@ -53,6 +53,20 @@ export const extractZodExpression = (comment: string): string | null =>
   extractTypeExpression(comment, '@zod(')
 
 /**
+ * Check if a comment contains @ignore directive (for columns)
+ */
+export const hasIgnoreDirective = (comment: string): boolean => {
+  return comment.includes('@ignore')
+}
+
+/**
+ * Check if a comment contains @@ignore directive (for tables)
+ */
+export const hasTableIgnoreDirective = (comment: string): boolean => {
+  return comment.includes('@@ignore')
+}
+
+/**
  * Check if a comment contains any magic comment
  */
 export const hasMagicComment = (comment: string): boolean => {

@@ -191,6 +191,7 @@ CREATE TABLE `user` (
   `name` varchar(255) COMMENT '@zod(z.string().min(2).max(50))',
   `email` varchar(255) COMMENT '@ts(EmailAddress) @kysely(string)',
   `metadata` json COMMENT '@ts(UserMetadata)',
+  `password_hash` varchar(255) COMMENT '@ignore',
   PRIMARY KEY (`id`)
 );
 ```
@@ -199,6 +200,77 @@ CREATE TABLE `user` (
 - `@zod(...)` - Override Zod schema
 - `@ts(...)` - Override TypeScript type
 - `@kysely(...)` - Override Kysely type
+- `@ignore` - Exclude column from generated types
+- `@@ignore` - Exclude table/model from generated types
+
+### Ignoring Columns and Tables
+
+Use `@ignore` and `@@ignore` directives to exclude columns and tables from code generation:
+
+#### Prisma Schemas
+
+**Ignore specific fields:**
+```prisma
+model User {
+  id        Int     @id @default(autoincrement())
+  email     String  @unique
+  password  String  @ignore  // This field will be excluded
+  createdAt DateTime @default(now())
+}
+```
+
+**Ignore entire models:**
+```prisma
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  userId    Int
+  timestamp DateTime @default(now())
+
+  @@ignore  // This entire model will be excluded
+}
+```
+
+#### SQL Databases (MySQL, PostgreSQL, SQLite)
+
+**Ignore specific columns in MySQL:**
+```sql
+ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) COMMENT '@ignore';
+ALTER TABLE users MODIFY COLUMN internal_id VARCHAR(100) COMMENT 'Internal tracking @ignore';
+```
+
+**Ignore specific columns in PostgreSQL:**
+```sql
+COMMENT ON COLUMN users.password_hash IS '@ignore';
+COMMENT ON COLUMN users.internal_id IS 'Internal tracking @ignore';
+```
+
+**Ignore entire tables in MySQL:**
+```sql
+ALTER TABLE audit_logs COMMENT = '@@ignore';
+ALTER TABLE internal_metrics COMMENT = 'Internal table @@ignore';
+```
+
+**Ignore entire tables in PostgreSQL:**
+```sql
+COMMENT ON TABLE audit_logs IS '@@ignore';
+COMMENT ON TABLE internal_metrics IS 'Internal table @@ignore';
+```
+
+**Example with mixed ignored and non-ignored columns:**
+```sql
+CREATE TABLE `user` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `email` varchar(255) NOT NULL,
+  `name` varchar(255),
+  `password_hash` varchar(255) COMMENT '@ignore',
+  `internal_tracking_id` varchar(100) COMMENT 'Internal use only @ignore',
+  `metadata` json COMMENT '@ts(UserMetadata)',
+  PRIMARY KEY (`id`)
+);
+```
+
+Generated types will only include: `id`, `email`, `name`, and `metadata`
 
 ## Type Overrides
 

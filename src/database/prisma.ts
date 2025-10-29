@@ -31,6 +31,16 @@ export function extractPrismaEntities(config: Config): {
   const prismaModels = schema.findAllByType('model', {})
   const tables = prismaModels
     .filter((m): m is Model => m !== null)
+    .filter((model: any) => {
+      // Skip models with @@ignore attribute
+      // The @@ignore attribute is stored in the properties array as an object attribute
+      if (model.properties && Array.isArray(model.properties)) {
+        return !model.properties.some(
+          (prop: any) => prop.type === 'attribute' && prop.name === 'ignore' && prop.kind === 'object'
+        )
+      }
+      return true
+    })
     .map((model) => model.name)
 
   // Extract views
@@ -99,11 +109,22 @@ export function extractPrismaColumnDescriptions(
     return []
   }
 
+  // Skip if model has @@ignore attribute
+  if (entity.type === 'model' && entity.properties && Array.isArray(entity.properties)) {
+    const hasIgnore = entity.properties.some(
+      (prop: any) => prop.type === 'attribute' && prop.name === 'ignore' && prop.kind === 'object'
+    )
+    if (hasIgnore) {
+      return []
+    }
+  }
+
   const fields = entity.properties.filter(
     (p: any): p is Field =>
       p.type === 'field' &&
       p.array !== true &&
-      !p.attributes?.find((a: Attribute) => a.name === 'relation'),
+      !p.attributes?.find((a: Attribute) => a.name === 'relation') &&
+      !p.attributes?.find((a: Attribute) => a.name === 'ignore'),
   )
 
   return fields.map((field: any) => {
