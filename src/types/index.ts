@@ -57,7 +57,7 @@ export interface Config {
         password: string
         database: string
         overrideTypes?: { [k in MySQLValidTypes]?: string }
-        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+        // biome-ignore lint/suspicious/noExplicitAny: ok
         ssl?: Record<string, any>
       }
     | {
@@ -69,7 +69,7 @@ export interface Config {
         database: string
         schema?: string
         overrideTypes?: { [k in PostgresValidTypes]?: string }
-        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+        // biome-ignore lint/suspicious/noExplicitAny: ok
         ssl?: Record<string, any>
       }
     | {

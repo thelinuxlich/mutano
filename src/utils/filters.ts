@@ -11,13 +11,9 @@ export function filterEntities(
   ignored?: string[]
 ): string[] {
   let filtered = [...entities]
-
-  // Apply include filter
   if (included?.length) {
     filtered = filtered.filter((entity) => included.includes(entity))
   }
-
-  // Apply ignore filter
   if (ignored?.length) {
     const ignoredRegex = ignored.filter((ignoreString) => {
       return ignoreString.startsWith('/') && ignoreString.endsWith('/')
@@ -26,12 +22,9 @@ export function filterEntities(
       (entity) => !ignoredRegex.includes(entity)
     )
 
-    // Filter by exact names
     if (ignoredNames.length) {
       filtered = filtered.filter((entity) => !ignoredNames.includes(entity))
     }
-
-    // Filter by regex patterns
     if (ignoredRegex.length) {
       filtered = filtered.filter((entity) => {
         let useEntity = true
