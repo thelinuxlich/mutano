@@ -913,7 +913,24 @@ function extractPrismaEntities(config) {
     if (prismaEnum && "name" in prismaEnum && "enumerators" in prismaEnum) {
       const enumName = prismaEnum.name;
       const enumerators = prismaEnum.enumerators;
-      enumDeclarations[enumName] = enumerators.map((e) => {
+      const hasEnumIgnore = enumerators.some(
+        (item) => item.type === "attribute" && item.name === "ignore" && item.kind === "object"
+      );
+      if (hasEnumIgnore) {
+        continue;
+      }
+      const filteredEnumValues = enumerators.filter((e) => {
+        if (e.type === "attribute") {
+          return false;
+        }
+        if ("attributes" in e && e.attributes) {
+          const hasIgnore = e.attributes.some((attr) => attr.name === "ignore");
+          if (hasIgnore) {
+            return false;
+          }
+        }
+        return true;
+      }).map((e) => {
         if ("attributes" in e && e.attributes) {
           const mapAttr = e.attributes.find((attr) => attr.name === "map");
           if (mapAttr && mapAttr.args && mapAttr.args.length > 0) {
@@ -931,6 +948,7 @@ function extractPrismaEntities(config) {
         }
         return e.name;
       });
+      enumDeclarations[enumName] = filteredEnumValues;
     }
   }
   return { tables, views, enumDeclarations };

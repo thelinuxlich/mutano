@@ -52,32 +52,60 @@ export function extractPrismaEntities(config: Config): {
   // Extract enums
   const enumDeclarations: Record<string, string[]> = {}
   const prismaEnums = schema.findAllByType('enum', {})
-  
+
   for (const prismaEnum of prismaEnums) {
     if (prismaEnum && 'name' in prismaEnum && 'enumerators' in prismaEnum) {
       const enumName = prismaEnum.name
-      const enumerators = prismaEnum.enumerators as Enumerator[]
-      enumDeclarations[enumName] = enumerators.map((e) => {
-        // Check for @map attribute
-        if ('attributes' in e && e.attributes) {
-          const mapAttr = e.attributes.find((attr: Attribute) => attr.name === 'map')
-          if (mapAttr && mapAttr.args && mapAttr.args.length > 0) {
-            const mapValue = mapAttr.args[0]
-            if (typeof mapValue === 'object' && 'value' in mapValue) {
-              // Remove quotes if present
-              let cleanValue = String(mapValue.value)
-              if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
-                cleanValue = cleanValue.slice(1, -1)
-              }
-              return cleanValue
-            } else if (typeof mapValue === 'string') {
-              return mapValue
+      const enumerators = prismaEnum.enumerators as any[]
+
+      // Check if enum has @@ignore attribute
+      // The @@ignore attribute is stored in the enumerators array as an object attribute
+      const hasEnumIgnore = enumerators.some(
+        (item: any) => item.type === 'attribute' && item.name === 'ignore' && item.kind === 'object'
+      )
+      if (hasEnumIgnore) {
+        continue // Skip this enum
+      }
+
+      // Filter out enum values with @ignore attribute and map values
+      const filteredEnumValues = enumerators
+        .filter((e: any) => {
+          // Skip attributes (like @@ignore)
+          if (e.type === 'attribute') {
+            return false
+          }
+          // Check if enumerator has @ignore attribute
+          if ('attributes' in e && e.attributes) {
+            const hasIgnore = e.attributes.some((attr: Attribute) => attr.name === 'ignore')
+            if (hasIgnore) {
+              return false // Skip this enum value
             }
           }
-        }
-        // Fallback to enum name if no @map
-        return e.name
-      })
+          return true
+        })
+        .map((e: Enumerator) => {
+          // Check for @map attribute
+          if ('attributes' in e && e.attributes) {
+            const mapAttr = e.attributes.find((attr: Attribute) => attr.name === 'map')
+            if (mapAttr && mapAttr.args && mapAttr.args.length > 0) {
+              const mapValue = mapAttr.args[0]
+              if (typeof mapValue === 'object' && 'value' in mapValue) {
+                // Remove quotes if present
+                let cleanValue = String(mapValue.value)
+                if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
+                  cleanValue = cleanValue.slice(1, -1)
+                }
+                return cleanValue
+              } else if (typeof mapValue === 'string') {
+                return mapValue
+              }
+            }
+          }
+          // Fallback to enum name if no @map
+          return e.name
+        })
+
+      enumDeclarations[enumName] = filteredEnumValues
     }
   }
 
