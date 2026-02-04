@@ -88,6 +88,7 @@ export interface Config {
   magicComments?: boolean
   includeViews?: boolean
   enumDeclarations?: Record<string, string[]>
+  inflection?: 'singular' | 'plural' | 'none'
 }
 
 export interface GenerateContentParams {

@@ -180,6 +180,39 @@ export type UpdateableUser = Updateable<User>;
 | `camelCase` | Convert to camelCase |
 | `dryRun` | Return content without writing files |
 | `magicComments` | Enable @zod/@ts/@kysely comments (Obs.: no SQLite support) |
+| `inflection` | Transform model names: `'singular'`, `'plural'`, or `'none'` (default) |
+
+### Inflection
+
+Transform table/view names to singular or plural form in generated types:
+
+```typescript
+// Singular inflection - "users" table becomes "User" type
+await generate({
+  origin: { /* ... */ },
+  destinations: [{ type: 'zod' }],
+  inflection: 'singular'
+})
+
+// Plural inflection - "user" table becomes "Users" type
+await generate({
+  origin: { /* ... */ },
+  destinations: [{ type: 'ts' }],
+  inflection: 'plural'
+})
+```
+
+**Examples:**
+
+| Table Name | `inflection: 'singular'` | `inflection: 'plural'` | `inflection: 'none'` |
+|------------|-------------------------|----------------------|---------------------|
+| `users` | `UserType` | `UsersType` | `UsersType` |
+| `companies` | `CompanyType` | `CompaniesType` | `CompaniesType` |
+| `people` | `PersonType` | `PeopleType` | `PeopleType` |
+| `categories` | `CategoryType` | `CategoriesType` | `CategoriesType` |
+| `user_accounts` | `UserAccountType` | `UserAccountsType` | `UserAccountsType` |
+
+Works with all output types (Zod, TypeScript, Kysely) and combines with `camelCase` option.
 
 ## Magic Comments
 

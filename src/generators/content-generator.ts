@@ -6,6 +6,7 @@ import camelCase from 'camelcase'
 import type { GenerateContentParams, GenerateViewContentParams, Desc } from '../types/index.js'
 import { getType } from './type-generator.js'
 import { getTypeMappings } from '../types/mappings.js'
+import { applyInflection } from '../utils/inflection.js'
 
 /**
  * Check if a field is an auto-generated datetime field that should be excluded from updateable schemas
@@ -52,10 +53,11 @@ export function generateViewContent({
   defaultZodHeader,
 }: GenerateViewContentParams): string {
   let content = ''
+  const inflectedView = applyInflection(view, config.inflection)
 
   if (destination.type === 'kysely') {
     // For Kysely views, we only generate the view interface (read-only)
-    const pascalView = camelCase(view, { pascalCase: true })
+    const pascalView = camelCase(inflectedView, { pascalCase: true })
     content += `// Kysely type definitions for ${view} (view)\n\n`
     content += `// This interface defines the structure of the '${view}' view (read-only)\n`
     content += `export interface ${pascalView}View {\n`
@@ -71,7 +73,7 @@ export function generateViewContent({
     content += `export type Selectable${pascalView}View = Selectable<${pascalView}View>;\n`
   } else if (destination.type === 'ts') {
     // For TypeScript views, generate a single interface (read-only)
-    const pascalView = camelCase(view, { pascalCase: true })
+    const pascalView = camelCase(inflectedView, { pascalCase: true })
     content += `// TypeScript interface for ${view} (view - read-only)\n`
     content += `export interface ${pascalView}View {\n`
 
@@ -103,7 +105,7 @@ export function generateViewContent({
 
     content += '})\n\n'
 
-    const pascalView = camelCase(view, { pascalCase: true })
+    const pascalView = camelCase(inflectedView, { pascalCase: true })
     content += `export type ${camelCase(`${pascalView}ViewType`, {
       pascalCase: true,
     })} = z.infer<typeof ${snakeView}_view>\n`
@@ -173,7 +175,8 @@ function generateTypeScriptContent({
   isCamelCase: boolean
 }): string {
   let content = ''
-  const pascalTable = camelCase(table, { pascalCase: true })
+  const inflectedTable = applyInflection(table, config.inflection)
+  const pascalTable = camelCase(inflectedTable, { pascalCase: true })
 
   // Generate main interface
   content += `// TypeScript interfaces for ${table}\n\n`
@@ -234,7 +237,8 @@ function generateKyselyContent({
   isCamelCase: boolean
 }): string {
   let content = ''
-  const pascalTable = camelCase(table, { pascalCase: true })
+  const inflectedTable = applyInflection(table, config.inflection)
+  const pascalTable = camelCase(inflectedTable, { pascalCase: true })
 
   content += `// Kysely type definitions for ${table}\n\n`
   content += `// This interface defines the structure of the '${table}' table\n`
@@ -306,6 +310,7 @@ function generateZodContent({
 
   // Convert table name to snake_case for Zod schemas
   const snakeTable = toSnakeCase(table)
+  const inflectedTable = applyInflection(table, config.inflection)
 
   // Generate main schema
   content += `export const ${snakeTable} = z.object({\n`
@@ -355,11 +360,12 @@ function generateZodContent({
   }
   content += '})\n\n'
 
-  // Generate type exports
-  content += `export type ${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof ${snakeTable}>\n`
-  content += `export type Insertable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof insertable_${snakeTable}>\n`
-  content += `export type Updateable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof updateable_${snakeTable}>\n`
-  content += `export type Selectable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof selectable_${snakeTable}>\n`
+  // Generate type exports using inflected table name
+  const pascalInflectedTableType = camelCase(`${inflectedTable}Type`, { pascalCase: true })
+  content += `export type ${pascalInflectedTableType} = z.infer<typeof ${snakeTable}>\n`
+  content += `export type Insertable${pascalInflectedTableType} = z.infer<typeof insertable_${snakeTable}>\n`
+  content += `export type Updateable${pascalInflectedTableType} = z.infer<typeof updateable_${snakeTable}>\n`
+  content += `export type Selectable${pascalInflectedTableType} = z.infer<typeof selectable_${snakeTable}>\n`
 
   return content
 }

@@ -8,6 +8,7 @@ import { writeFile } from 'node:fs/promises'
 import { ensureDir } from 'fs-extra/esm'
 import type { Config, Desc } from './types/index.js'
 import { filterTables, filterViews, createEntityList } from './utils/filters.js'
+import { applyInflection } from './utils/inflection.js'
 import { generateContent, generateViewContent } from './generators/content-generator.js'
 import {
   createDatabaseConnection,
@@ -153,8 +154,9 @@ export async function generate(config: Config): Promise<Record<string, string>> 
       const sortedTableEntries = tableContents
         .map(({ table, content }) => {
           const isView = content.includes('(view')
-          const pascalTable = camelCase(table, { pascalCase: true }) + (isView ? 'View' : '')
-          const tableKey = isCamelCase ? camelCase(table) : table
+          const inflectedTable = applyInflection(table, config.inflection)
+          const pascalTable = camelCase(inflectedTable, { pascalCase: true }) + (isView ? 'View' : '')
+          const tableKey = isCamelCase ? camelCase(inflectedTable) : inflectedTable
           return { tableKey, pascalTable, isView }
         })
         .sort((a, b) => a.tableKey.localeCompare(b.tableKey))

@@ -84,6 +84,7 @@ interface Config {
     magicComments?: boolean;
     includeViews?: boolean;
     enumDeclarations?: Record<string, string[]>;
+    inflection?: 'singular' | 'plural' | 'none';
 }
 interface GenerateContentParams {
     table: string;
@@ -160,12 +161,8 @@ declare function getType(op: OperationType, desc: Desc, config: Config, destinat
 
 /**
  * Mutano - Database schema to TypeScript/Zod/Kysely converter
- * Refactored for better maintainability and modularity
  */
 
-/**
- * Main generate function - orchestrates the entire schema generation process
- */
 declare function generate(config: Config): Promise<Record<string, string>>;
 
 export { defaultKyselyHeader, defaultZodHeader, extractKyselyExpression, extractTSExpression, extractTypeExpression, extractZodExpression, generate, generateContent, generateViewContent, getType };

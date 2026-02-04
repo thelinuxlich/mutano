@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import camelCase from 'camelcase';
 import { writeFile } from 'node:fs/promises';
 import { ensureDir } from 'fs-extra/esm';
+import pluralize from 'pluralize';
 import knex from 'knex';
 import { readFileSync } from 'node:fs';
 import { createPrismaSchemaBuilder } from '@mrleebo/prisma-ast';
@@ -46,6 +47,16 @@ function createEntityList(tables, views) {
     ...views.map((name) => ({ name, type: "view" }))
   ];
   return allEntities.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function applyInflection(name, inflection) {
+  if (inflection === "singular") {
+    return pluralize.singular(name);
+  }
+  if (inflection === "plural") {
+    return pluralize.plural(name);
+  }
+  return name;
 }
 
 const dateTypes = {
@@ -472,8 +483,9 @@ function generateViewContent({
   defaultZodHeader
 }) {
   let content = "";
+  const inflectedView = applyInflection(view, config.inflection);
   if (destination.type === "kysely") {
-    const pascalView = camelCase(view, { pascalCase: true });
+    const pascalView = camelCase(inflectedView, { pascalCase: true });
     content += `// Kysely type definitions for ${view} (view)
 
 `;
@@ -493,7 +505,7 @@ function generateViewContent({
     content += `export type Selectable${pascalView}View = Selectable<${pascalView}View>;
 `;
   } else if (destination.type === "ts") {
-    const pascalView = camelCase(view, { pascalCase: true });
+    const pascalView = camelCase(inflectedView, { pascalCase: true });
     content += `// TypeScript interface for ${view} (view - read-only)
 `;
     content += `export interface ${pascalView}View {
@@ -523,7 +535,7 @@ function generateViewContent({
 `;
     }
     content += "})\n\n";
-    const pascalView = camelCase(view, { pascalCase: true });
+    const pascalView = camelCase(inflectedView, { pascalCase: true });
     content += `export type ${camelCase(`${pascalView}ViewType`, {
       pascalCase: true
     })} = z.infer<typeof ${snakeView}_view>
@@ -577,7 +589,8 @@ function generateTypeScriptContent({
   isCamelCase
 }) {
   let content = "";
-  const pascalTable = camelCase(table, { pascalCase: true });
+  const inflectedTable = applyInflection(table, config.inflection);
+  const pascalTable = camelCase(inflectedTable, { pascalCase: true });
   content += `// TypeScript interfaces for ${table}
 
 `;
@@ -627,7 +640,8 @@ function generateKyselyContent({
   isCamelCase
 }) {
   let content = "";
-  const pascalTable = camelCase(table, { pascalCase: true });
+  const inflectedTable = applyInflection(table, config.inflection);
+  const pascalTable = camelCase(inflectedTable, { pascalCase: true });
   content += `// Kysely type definitions for ${table}
 
 `;
@@ -676,6 +690,7 @@ function generateZodContent({
     content += header;
   }
   const snakeTable = toSnakeCase(table);
+  const inflectedTable = applyInflection(table, config.inflection);
   content += `export const ${snakeTable} = z.object({
 `;
   for (const desc of describes) {
@@ -720,13 +735,14 @@ function generateZodContent({
 `;
   }
   content += "})\n\n";
-  content += `export type ${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof ${snakeTable}>
+  const pascalInflectedTableType = camelCase(`${inflectedTable}Type`, { pascalCase: true });
+  content += `export type ${pascalInflectedTableType} = z.infer<typeof ${snakeTable}>
 `;
-  content += `export type Insertable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof insertable_${snakeTable}>
+  content += `export type Insertable${pascalInflectedTableType} = z.infer<typeof insertable_${snakeTable}>
 `;
-  content += `export type Updateable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof updateable_${snakeTable}>
+  content += `export type Updateable${pascalInflectedTableType} = z.infer<typeof updateable_${snakeTable}>
 `;
-  content += `export type Selectable${camelCase(`${table}Type`, { pascalCase: true })} = z.infer<typeof selectable_${snakeTable}>
+  content += `export type Selectable${pascalInflectedTableType} = z.infer<typeof selectable_${snakeTable}>
 `;
   return content;
 }
@@ -1156,8 +1172,9 @@ export interface ${schemaName} {
 `;
       const sortedTableEntries = tableContents.map(({ table, content }) => {
         const isView = content.includes("(view");
-        const pascalTable = camelCase(table, { pascalCase: true }) + (isView ? "View" : "");
-        const tableKey = isCamelCase ? camelCase(table) : table;
+        const inflectedTable = applyInflection(table, config.inflection);
+        const pascalTable = camelCase(inflectedTable, { pascalCase: true }) + (isView ? "View" : "");
+        const tableKey = isCamelCase ? camelCase(inflectedTable) : inflectedTable;
         return { tableKey, pascalTable, isView };
       }).sort((a, b) => a.tableKey.localeCompare(b.tableKey));
       for (const { tableKey, pascalTable } of sortedTableEntries) {
