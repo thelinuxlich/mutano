@@ -40,9 +40,6 @@ interface Config {
     origin: {
         type: 'prisma';
         path: string;
-        overrideTypes?: {
-            [k in PrismaValidTypes]?: string;
-        };
     } | {
         type: 'mysql';
         host: string;
@@ -50,9 +47,6 @@ interface Config {
         user: string;
         password: string;
         database: string;
-        overrideTypes?: {
-            [k in MySQLValidTypes]?: string;
-        };
         ssl?: Record<string, any>;
     } | {
         type: 'postgres';
@@ -62,16 +56,10 @@ interface Config {
         password: string;
         database: string;
         schema?: string;
-        overrideTypes?: {
-            [k in PostgresValidTypes]?: string;
-        };
         ssl?: Record<string, any>;
     } | {
         type: 'sqlite';
         path: string;
-        overrideTypes?: {
-            [k in SQLiteValidTypes]?: string;
-        };
     };
     destinations: Destination[];
     tables?: string[];
@@ -82,6 +70,16 @@ interface Config {
     silent?: boolean;
     dryRun?: boolean;
     magicComments?: boolean;
+    overrideTypes?: {
+        zod?: Record<string, string>;
+        ts?: Record<string, string>;
+        kysely?: Record<string, string>;
+    };
+    overrideColumns?: {
+        zod?: Record<string, Record<string, string>>;
+        ts?: Record<string, Record<string, string>>;
+        kysely?: Record<string, Record<string, string>>;
+    };
     includeViews?: boolean;
     enumDeclarations?: Record<string, string[]>;
     inflection?: 'singular' | 'plural' | 'none';
@@ -104,10 +102,6 @@ interface GenerateViewContentParams {
     enumDeclarations: Record<string, string[]>;
     defaultZodHeader: (version: 3 | 4) => string;
 }
-type MySQLValidTypes = 'tinyint' | 'smallint' | 'mediumint' | 'int' | 'bigint' | 'decimal' | 'float' | 'double' | 'bit' | 'char' | 'varchar' | 'binary' | 'varbinary' | 'tinyblob' | 'blob' | 'mediumblob' | 'longblob' | 'tinytext' | 'text' | 'mediumtext' | 'longtext' | 'enum' | 'set' | 'date' | 'time' | 'datetime' | 'timestamp' | 'year' | 'json';
-type PostgresValidTypes = 'smallint' | 'integer' | 'bigint' | 'decimal' | 'numeric' | 'real' | 'double precision' | 'smallserial' | 'serial' | 'bigserial' | 'money' | 'character varying' | 'varchar' | 'character' | 'char' | 'text' | 'bytea' | 'timestamp' | 'timestamp with time zone' | 'timestamp without time zone' | 'date' | 'time' | 'time with time zone' | 'time without time zone' | 'interval' | 'boolean' | 'enum' | 'point' | 'line' | 'lseg' | 'box' | 'path' | 'polygon' | 'circle' | 'cidr' | 'inet' | 'macaddr' | 'bit' | 'bit varying' | 'uuid' | 'xml' | 'json' | 'jsonb' | 'int4range' | 'int8range' | 'numrange' | 'tsrange' | 'tstzrange' | 'daterange' | 'name' | 'citext';
-type SQLiteValidTypes = 'integer' | 'real' | 'text' | 'blob' | 'numeric' | 'boolean' | 'date' | 'datetime' | 'character' | 'varchar' | 'varying character' | 'nchar' | 'native character' | 'nvarchar' | 'clob' | 'double' | 'double precision' | 'float' | 'int' | 'int2' | 'int8' | 'bigint' | 'unsigned big int' | 'mediumint' | 'tinyint' | 'smallint' | 'decimal' | 'json';
-type PrismaValidTypes = 'String' | 'Boolean' | 'Int' | 'BigInt' | 'Float' | 'Decimal' | 'DateTime' | 'Json' | 'Bytes' | 'Unsupported';
 
 /**
  * Constants and default headers for code generation
@@ -157,7 +151,7 @@ type OperationType = 'table' | 'insertable' | 'updateable' | 'selectable';
 /**
  * Generate the appropriate type for a database field
  */
-declare function getType(op: OperationType, desc: Desc, config: Config, destination: Destination): string;
+declare function getType(op: OperationType, desc: Desc, config: Config, destination: Destination, entityName?: string): string;
 
 /**
  * Mutano - Database schema to TypeScript/Zod/Kysely converter

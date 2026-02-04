@@ -17,7 +17,12 @@ describe('mutano', () => {
 			password: 'password',
 			database: 'rise',
 			overrideTypes: {
-				json: 'z.record(z.string())',
+				zod: {
+					json: 'z.record(z.string())',
+				},
+				ts: {
+					json: 'z.record(z.string())',
+				},
 			},
 		},
 		destinations: [
@@ -44,7 +49,12 @@ describe('mutano', () => {
 			user: 'root',
 			password: 'password',
 			database: 'rise',
-			overrideTypes: {
+		},
+		overrideTypes: {
+			zod: {
+				json: 'z.record(z.string())',
+			},
+			ts: {
 				json: 'z.record(z.string())',
 			},
 		},
@@ -68,7 +78,12 @@ describe('mutano', () => {
 			password: 'password',
 			database: 'rise',
 			overrideTypes: {
-				json: 'z.record(z.string())',
+				zod: {
+					json: 'z.record(z.string())',
+				},
+				ts: {
+					json: 'z.record(z.string())',
+				},
 			},
 		},
 		destinations: [

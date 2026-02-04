@@ -23,7 +23,8 @@ export function getType(
   op: OperationType,
   desc: Desc,
   config: Config,
-  destination: Destination
+  destination: Destination,
+  entityName?: string
 ): string {
   const { Default, Extra, Null, Type, Comment, EnumOptions } = desc
   const schemaType = config.origin.type
@@ -39,50 +40,30 @@ export function getType(
 
   const typeMappings = getTypeMappings(schemaType)
 
-  // Handle JSON types first for Kysely (includes json, jsonb)
-  if (isTsDestination || isKyselyDestination) {
-    const isJsonField = isJsonType(type)
-    if (isKyselyDestination && isJsonField) {
-      // Check for magic comments first
-      if (config.magicComments) {
-        const kyselyOverrideType = extractKyselyExpression(Comment)
-        if (kyselyOverrideType) {
-          // @kysely magic comment completely overrides the previous type
-          // No additional nullability modifications
-          return kyselyOverrideType
-        }
-      }
-      
-      // Default JSON handling
+  const destKey = isZodDestination ? 'zod' : isTsDestination ? 'ts' : 'kysely'
+
+  // Handle column overrides from config (highest priority)
+  if (entityName && config.overrideColumns) {
+    const destOverrides = config.overrideColumns[destKey]
+    if (destOverrides && destOverrides[entityName] && destOverrides[entityName][desc.Field]) {
+      const columnOverride = destOverrides[entityName][desc.Field]
       const shouldBeNullable =
         isNull ||
         (['insertable', 'updateable'].includes(op) &&
           (hasDefaultValue || isGenerated)) ||
         (op === 'updateable' && !isNull && !hasDefaultValue)
-      return shouldBeNullable ? 'Json | null' : 'Json'
-    }
-    
-    if (isKyselyDestination && config.magicComments) {
-      const kyselyOverrideType = extractKyselyExpression(Comment)
-      if (kyselyOverrideType) {
-        // @kysely magic comment completely overrides the previous type
-        // No additional nullability modifications
-        return kyselyOverrideType
-      }
-    }
 
-    // Handle TypeScript magic comments (also used as fallback for Kysely)
-    if ((isTsDestination || isKyselyDestination) && config.magicComments) {
-      const tsOverrideType = extractTSExpression(Comment)
-      if (tsOverrideType) {
-        // @ts magic comment completely overrides the previous type
-        // No additional nullability modifications
-        return tsOverrideType
+      if (isZodDestination) {
+        const nullishOption = (destination as any).nullish
+        const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
+        return shouldBeNullable ? `${columnOverride}.${nullableMethod}()` : columnOverride
+      } else {
+        return shouldBeNullable ? `${columnOverride} | null` : columnOverride
       }
     }
   }
 
-  // Handle Zod magic comments
+  // Handle magic comments (second priority)
   if (isZodDestination && config.magicComments) {
     const zodOverrideType = extractZodExpression(Comment)
     if (zodOverrideType) {
@@ -92,10 +73,36 @@ export function getType(
     }
   }
 
-  // Handle override types from config
-  const overrideTypes = config.origin.overrideTypes as Record<string, string> | undefined
-  if (overrideTypes && overrideTypes[Type]) {
-    const overrideType = overrideTypes[Type]
+  // Handle TypeScript magic comments
+  if (isTsDestination && config.magicComments) {
+    const tsOverrideType = extractTSExpression(Comment)
+    if (tsOverrideType) {
+      // @ts magic comment completely overrides the previous type
+      // No additional nullability modifications
+      return tsOverrideType
+    }
+  }
+
+  // Handle Kysely magic comments
+  if (isKyselyDestination && config.magicComments) {
+    const kyselyOverrideType = extractKyselyExpression(Comment)
+    if (kyselyOverrideType) {
+      // @kysely magic comment completely overrides the previous type
+      // No additional nullability modifications
+      return kyselyOverrideType
+    }
+
+    // For Kysely, fall back to @ts if no @kysely
+    const tsOverrideType = extractTSExpression(Comment)
+    if (tsOverrideType) {
+      return tsOverrideType
+    }
+  }
+
+  // Handle override types from config (third priority)
+  const overrideType = config.overrideTypes?.[destKey]?.[Type]
+
+  if (overrideType) {
     const shouldBeNullable =
       isNull ||
       (['insertable', 'updateable'].includes(op) &&
@@ -109,6 +116,20 @@ export function getType(
       return shouldBeNullable ? `${overrideType}.${nullableMethod}()` : overrideType
     } else {
       return shouldBeNullable ? `${overrideType} | null` : overrideType
+    }
+  }
+
+  // Handle JSON types first for Kysely (includes json, jsonb)
+  if (isTsDestination || isKyselyDestination) {
+    const isJsonField = isJsonType(type)
+    if (isKyselyDestination && isJsonField) {
+      // Default JSON handling
+      const shouldBeNullable =
+        isNull ||
+        (['insertable', 'updateable'].includes(op) &&
+          (hasDefaultValue || isGenerated)) ||
+        (op === 'updateable' && !isNull && !hasDefaultValue)
+      return shouldBeNullable ? 'Json | null' : 'Json'
     }
   }
 

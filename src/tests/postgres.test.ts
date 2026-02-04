@@ -24,7 +24,21 @@ describe('mutano with PostgreSQL (pglite)', () => {
 			password: 'password',
 			database: 'test',
 			schema: 'public',
-			overrideTypes: {
+		},
+		overrideTypes: {
+			zod: {
+				jsonb: 'z.record(z.string())',
+				text: 'z.string().min(1)',
+				integer: 'z.number().int()',
+				'timestamp with time zone': 'z.date()',
+			},
+			ts: {
+				jsonb: 'z.record(z.string())',
+				text: 'z.string().min(1)',
+				integer: 'z.number().int()',
+				'timestamp with time zone': 'z.date()',
+			},
+			kysely: {
 				jsonb: 'z.record(z.string())',
 				text: 'z.string().min(1)',
 				integer: 'z.number().int()',
@@ -219,7 +233,8 @@ describe('mutano with PostgreSQL (pglite)', () => {
 					Type: 'jsonb',
 					Comment: '',
 				} as Desc,
-				expectedContains: 'Json | null',
+				// Config has overrideTypes that sets jsonb to 'z.record(z.string())'
+				expectedContains: 'z.record(z.string()) | null',
 				destination: 'kysely' as const,
 			},
 			{

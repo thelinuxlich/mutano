@@ -47,7 +47,6 @@ export interface Config {
     | {
         type: 'prisma'
         path: string
-        overrideTypes?: { [k in PrismaValidTypes]?: string }
       }
     | {
         type: 'mysql'
@@ -56,7 +55,6 @@ export interface Config {
         user: string
         password: string
         database: string
-        overrideTypes?: { [k in MySQLValidTypes]?: string }
         // biome-ignore lint/suspicious/noExplicitAny: ok
         ssl?: Record<string, any>
       }
@@ -68,14 +66,12 @@ export interface Config {
         password: string
         database: string
         schema?: string
-        overrideTypes?: { [k in PostgresValidTypes]?: string }
         // biome-ignore lint/suspicious/noExplicitAny: ok
         ssl?: Record<string, any>
       }
     | {
         type: 'sqlite'
         path: string
-        overrideTypes?: { [k in SQLiteValidTypes]?: string }
       }
   destinations: Destination[]
   tables?: string[]
@@ -86,6 +82,16 @@ export interface Config {
   silent?: boolean
   dryRun?: boolean
   magicComments?: boolean
+  overrideTypes?: {
+    zod?: Record<string, string>
+    ts?: Record<string, string>
+    kysely?: Record<string, string>
+  }
+  overrideColumns?: {
+    zod?: Record<string, Record<string, string>>
+    ts?: Record<string, Record<string, string>>
+    kysely?: Record<string, Record<string, string>>
+  }
   includeViews?: boolean
   enumDeclarations?: Record<string, string[]>
   inflection?: 'singular' | 'plural' | 'none'

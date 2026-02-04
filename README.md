@@ -115,22 +115,19 @@ export type UpdateableUser = Updateable<User>;
   password: string,
   database: string,
   schema?: string, // PostgreSQL only
-  ssl?: { ca, cert, key },
-  overrideTypes?: Record<string, string>
+  ssl?: { ca, cert, key }
 }
 
 // SQLite
 {
   type: 'sqlite',
-  path: string,
-  overrideTypes?: Record<string, string>
+  path: string
 }
 
 // Prisma
 {
   type: 'prisma',
-  path: string,
-  overrideTypes?: Record<string, string>
+  path: string
 }
 ```
 
@@ -181,6 +178,8 @@ export type UpdateableUser = Updateable<User>;
 | `dryRun` | Return content without writing files |
 | `magicComments` | Enable @zod/@ts/@kysely comments (Obs.: no SQLite support) |
 | `inflection` | Transform model names: `'singular'`, `'plural'`, or `'none'` (default) |
+| `overrideTypes` | Override types globally per destination (see below) |
+| `overrideColumns` | Override specific columns per table (see below) |
 
 ### Inflection
 
@@ -307,18 +306,51 @@ Generated types will only include: `id`, `email`, `name`, and `metadata`
 
 ## Type Overrides
 
-Override default types globally in your origin config:
+Override default types globally. Define destination-specific overrides for each output type:
 
 ```typescript
 {
   origin: {
     type: 'mysql',
     // ... connection config
-    overrideTypes: {
+  },
+  overrideTypes: {
+    zod: {
       json: 'z.record(z.string())',
       text: 'z.string().max(1000)',
       decimal: 'z.number().positive()'
+    },
+    ts: {
+      json: 'Record<string, string>',
+      text: 'string',
+      decimal: 'number'
+    },
+    kysely: {
+      json: 'Json',
+      text: 'string',
+      decimal: 'Decimal'
     }
+  }
+}
+```
+
+**Single destination with multiple outputs:**
+
+```typescript
+{
+  origin: {
+    type: 'postgres',
+    // ...
+  },
+  destinations: [
+    { type: 'zod', folder: './zod' },
+    { type: 'ts', folder: './types' },
+    { type: 'kysely', outFile: './db.ts' }
+  ],
+  overrideTypes: {
+    zod: { jsonb: 'z.record(z.string())' },
+    ts: { jsonb: 'Record<string, string>' },
+    kysely: { jsonb: 'Json' }
   }
 }
 ```
@@ -328,3 +360,49 @@ Override default types globally in your origin config:
 - **PostgreSQL**: `jsonb`, `uuid`, `text`, `numeric`
 - **SQLite**: `json`, `text`, `real`
 - **Prisma**: `Json`, `String`, `Decimal`
+
+### Override Columns
+
+Override specific columns from specific tables. Takes priority over magic comments:
+
+```typescript
+{
+  origin: {
+    type: 'mysql',
+    // ... connection config
+  },
+  destinations: [
+    { type: 'zod', folder: './zod' },
+    { type: 'ts', folder: './types' },
+    { type: 'kysely', outFile: './db.ts' }
+  ],
+  overrideColumns: {
+    zod: {
+      users: {
+        email: 'z.string().email()',
+        metadata: 'z.record(z.unknown())'
+      },
+      posts: {
+        content: 'z.string().max(10000)'
+      }
+    },
+    ts: {
+      users: {
+        email: 'EmailAddress',
+        metadata: 'Record<string, unknown>'
+      }
+    },
+    kysely: {
+      users: {
+        metadata: 'CustomJsonType'
+      }
+    }
+  }
+}
+```
+
+**Priority order** (highest to lowest):
+1. `overrideColumns` - Specific column overrides
+2. Magic comments (`@zod`, `@ts`, `@kysely`) - Column-level comments
+3. `overrideTypes` - Global type overrides
+4. Default type mappings

@@ -64,7 +64,7 @@ export function generateViewContent({
 
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const fieldType = getType('selectable', desc, config, destination)
+      const fieldType = getType('selectable', desc, config, destination, view)
       content += `  ${fieldName}: ${fieldType};\n`
     }
 
@@ -79,7 +79,7 @@ export function generateViewContent({
 
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const fieldType = getType('selectable', desc, config, destination)
+      const fieldType = getType('selectable', desc, config, destination, view)
       content += `  ${fieldName}: ${fieldType};\n`
     }
 
@@ -99,7 +99,7 @@ export function generateViewContent({
 
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-      const fieldType = getType('selectable', desc, config, destination)
+      const fieldType = getType('selectable', desc, config, destination, view)
       content += `  ${fieldName}: ${fieldType},\n`
     }
 
@@ -184,7 +184,7 @@ function generateTypeScriptContent({
 
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('table', desc, config, destination)
+    const fieldType = getType('table', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType};\n`
   }
 
@@ -194,7 +194,7 @@ function generateTypeScriptContent({
   content += `export interface Insertable${pascalTable} {\n`
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('insertable', desc, config, destination)
+    const fieldType = getType('insertable', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType};\n`
   }
   content += '}\n\n'
@@ -203,7 +203,7 @@ function generateTypeScriptContent({
   content += `export interface Updateable${pascalTable} {\n`
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('updateable', desc, config, destination)
+    const fieldType = getType('updateable', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType};\n`
   }
   content += '}\n\n'
@@ -212,7 +212,7 @@ function generateTypeScriptContent({
   content += `export interface Selectable${pascalTable} {\n`
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('selectable', desc, config, destination)
+    const fieldType = getType('selectable', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType};\n`
   }
   content += '}\n'
@@ -246,7 +246,7 @@ function generateKyselyContent({
 
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    let fieldType = getType('table', desc, config, destination)
+    let fieldType = getType('table', desc, config, destination, table)
 
     // Check if field has magic comment override - if so, don't wrap in Generated<>
     const hasMagicComment = config.magicComments && (
@@ -316,7 +316,7 @@ function generateZodContent({
   content += `export const ${snakeTable} = z.object({\n`
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('table', desc, config, destination)
+    const fieldType = getType('table', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType},\n`
   }
   content += '})\n\n'
@@ -331,7 +331,7 @@ function generateZodContent({
     }
 
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('insertable', desc, config, destination)
+    const fieldType = getType('insertable', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType},\n`
   }
   content += '})\n\n'
@@ -346,7 +346,7 @@ function generateZodContent({
     }
 
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('updateable', desc, config, destination)
+    const fieldType = getType('updateable', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType},\n`
   }
   content += '})\n\n'
@@ -355,7 +355,7 @@ function generateZodContent({
   content += `export const selectable_${snakeTable} = z.object({\n`
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field
-    const fieldType = getType('selectable', desc, config, destination)
+    const fieldType = getType('selectable', desc, config, destination, table)
     content += `  ${fieldName}: ${fieldType},\n`
   }
   content += '})\n\n'

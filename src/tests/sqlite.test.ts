@@ -21,11 +21,25 @@ describe('mutano with SQLite', () => {
 		origin: {
 			type: 'sqlite',
 			path: dbPath,
-			overrideTypes: {
+		},
+		overrideTypes: {
+			zod: {
 				json: 'z.record(z.string())',
 				text: 'z.string().min(1)',
 				integer: 'z.number().int()',
 				datetime: 'z.date()',
+			},
+			ts: {
+				json: 'Record<string, string>',
+				text: 'string',
+				integer: 'number',
+				datetime: 'Date',
+			},
+			kysely: {
+				json: 'Json',
+				text: 'string',
+				integer: 'number',
+				datetime: 'Timestamp',
 			},
 		},
 		destinations: [
@@ -326,7 +340,9 @@ describe('mutano with SQLite', () => {
 			origin: {
 				type: 'sqlite',
 				path: dbPath,
-				overrideTypes: {
+			},
+			overrideTypes: {
+				zod: {
 					text: 'z.string().max(1000)',
 					integer: 'z.number().positive()',
 					datetime: 'z.date().optional()',

@@ -218,7 +218,7 @@ const hasTableIgnoreDirective = (comment) => {
   return comment.includes("@@ignore");
 };
 
-function getType(op, desc, config, destination) {
+function getType(op, desc, config, destination, entityName) {
   const { Default, Extra, Null, Type, Comment, EnumOptions } = desc;
   const schemaType = config.origin.type;
   const type = schemaType === "prisma" ? Type : Type.toLowerCase();
@@ -229,28 +229,18 @@ function getType(op, desc, config, destination) {
   const isKyselyDestination = destination.type === "kysely";
   const isZodDestination = destination.type === "zod";
   const typeMappings = getTypeMappings(schemaType);
-  if (isTsDestination || isKyselyDestination) {
-    const isJsonField = isJsonType(type);
-    if (isKyselyDestination && isJsonField) {
-      if (config.magicComments) {
-        const kyselyOverrideType = extractKyselyExpression(Comment);
-        if (kyselyOverrideType) {
-          return kyselyOverrideType;
-        }
-      }
+  const destKey = isZodDestination ? "zod" : isTsDestination ? "ts" : "kysely";
+  if (entityName && config.overrideColumns) {
+    const destOverrides = config.overrideColumns[destKey];
+    if (destOverrides && destOverrides[entityName] && destOverrides[entityName][desc.Field]) {
+      const columnOverride = destOverrides[entityName][desc.Field];
       const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
-      return shouldBeNullable ? "Json | null" : "Json";
-    }
-    if (isKyselyDestination && config.magicComments) {
-      const kyselyOverrideType = extractKyselyExpression(Comment);
-      if (kyselyOverrideType) {
-        return kyselyOverrideType;
-      }
-    }
-    if ((isTsDestination || isKyselyDestination) && config.magicComments) {
-      const tsOverrideType = extractTSExpression(Comment);
-      if (tsOverrideType) {
-        return tsOverrideType;
+      if (isZodDestination) {
+        const nullishOption = destination.nullish;
+        const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
+        return shouldBeNullable ? `${columnOverride}.${nullableMethod}()` : columnOverride;
+      } else {
+        return shouldBeNullable ? `${columnOverride} | null` : columnOverride;
       }
     }
   }
@@ -260,9 +250,24 @@ function getType(op, desc, config, destination) {
       return zodOverrideType;
     }
   }
-  const overrideTypes = config.origin.overrideTypes;
-  if (overrideTypes && overrideTypes[Type]) {
-    const overrideType = overrideTypes[Type];
+  if (isTsDestination && config.magicComments) {
+    const tsOverrideType = extractTSExpression(Comment);
+    if (tsOverrideType) {
+      return tsOverrideType;
+    }
+  }
+  if (isKyselyDestination && config.magicComments) {
+    const kyselyOverrideType = extractKyselyExpression(Comment);
+    if (kyselyOverrideType) {
+      return kyselyOverrideType;
+    }
+    const tsOverrideType = extractTSExpression(Comment);
+    if (tsOverrideType) {
+      return tsOverrideType;
+    }
+  }
+  const overrideType = config.overrideTypes?.[destKey]?.[Type];
+  if (overrideType) {
     const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
     if (isZodDestination) {
       const nullishOption = destination.nullish;
@@ -270,6 +275,13 @@ function getType(op, desc, config, destination) {
       return shouldBeNullable ? `${overrideType}.${nullableMethod}()` : overrideType;
     } else {
       return shouldBeNullable ? `${overrideType} | null` : overrideType;
+    }
+  }
+  if (isTsDestination || isKyselyDestination) {
+    const isJsonField = isJsonType(type);
+    if (isKyselyDestination && isJsonField) {
+      const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
+      return shouldBeNullable ? "Json | null" : "Json";
     }
   }
   const enumTypesForSchema = typeMappings.enumTypes[schemaType] || [];
@@ -495,7 +507,7 @@ function generateViewContent({
 `;
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-      const fieldType = getType("selectable", desc, config, destination);
+      const fieldType = getType("selectable", desc, config, destination, view);
       content += `  ${fieldName}: ${fieldType};
 `;
     }
@@ -512,7 +524,7 @@ function generateViewContent({
 `;
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-      const fieldType = getType("selectable", desc, config, destination);
+      const fieldType = getType("selectable", desc, config, destination, view);
       content += `  ${fieldName}: ${fieldType};
 `;
     }
@@ -530,7 +542,7 @@ function generateViewContent({
 `;
     for (const desc of describes) {
       const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-      const fieldType = getType("selectable", desc, config, destination);
+      const fieldType = getType("selectable", desc, config, destination, view);
       content += `  ${fieldName}: ${fieldType},
 `;
     }
@@ -598,7 +610,7 @@ function generateTypeScriptContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("table", desc, config, destination);
+    const fieldType = getType("table", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType};
 `;
   }
@@ -607,7 +619,7 @@ function generateTypeScriptContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("insertable", desc, config, destination);
+    const fieldType = getType("insertable", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType};
 `;
   }
@@ -616,7 +628,7 @@ function generateTypeScriptContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("updateable", desc, config, destination);
+    const fieldType = getType("updateable", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType};
 `;
   }
@@ -625,7 +637,7 @@ function generateTypeScriptContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("selectable", desc, config, destination);
+    const fieldType = getType("selectable", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType};
 `;
   }
@@ -651,7 +663,7 @@ function generateKyselyContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    let fieldType = getType("table", desc, config, destination);
+    let fieldType = getType("table", desc, config, destination, table);
     const hasMagicComment = config.magicComments && (desc.Comment.includes("@kysely(") || desc.Comment.includes("@ts("));
     if (!hasMagicComment) {
       const isAutoIncrement = desc.Extra.toLowerCase().includes("auto_increment");
@@ -695,7 +707,7 @@ function generateZodContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("table", desc, config, destination);
+    const fieldType = getType("table", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType},
 `;
   }
@@ -708,7 +720,7 @@ function generateZodContent({
       continue;
     }
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("insertable", desc, config, destination);
+    const fieldType = getType("insertable", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType},
 `;
   }
@@ -721,7 +733,7 @@ function generateZodContent({
       continue;
     }
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("updateable", desc, config, destination);
+    const fieldType = getType("updateable", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType},
 `;
   }
@@ -730,7 +742,7 @@ function generateZodContent({
 `;
   for (const desc of describes) {
     const fieldName = isCamelCase ? camelCase(desc.Field) : desc.Field;
-    const fieldType = getType("selectable", desc, config, destination);
+    const fieldType = getType("selectable", desc, config, destination, table);
     content += `  ${fieldName}: ${fieldType},
 `;
   }
