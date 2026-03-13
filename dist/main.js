@@ -16157,59 +16157,113 @@ function extractSqlEntities(config) {
   const tables = [];
   const views = [];
   const tableDefinitions = /* @__PURE__ */ new Map();
-  const tableMatches = sqlContent.matchAll(
-    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(([^;]+?)\)\s*(?:ENGINE|CHARSET|DEFAULT|COMMENT|;)/gi
-  );
-  for (const match of tableMatches) {
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(/gi;
+  let match;
+  while ((match = tableRegex.exec(sqlContent)) !== null) {
     const tableName = match[1];
-    const columnSection = match[2];
-    const columns = parseColumns(columnSection);
-    tables.push(tableName);
-    tableDefinitions.set(tableName, {
-      name: tableName,
-      isView: false,
-      columns
-    });
+    const startIdx = match.index + match[0].length - 1;
+    let parenDepth = 1;
+    let endIdx = startIdx + 1;
+    while (parenDepth > 0 && endIdx < sqlContent.length) {
+      if (sqlContent[endIdx] === "(") parenDepth++;
+      if (sqlContent[endIdx] === ")") parenDepth--;
+      endIdx++;
+    }
+    if (parenDepth === 0) {
+      const columnSection = sqlContent.substring(startIdx + 1, endIdx - 1);
+      const columns = parseColumns(columnSection);
+      if (columns.length > 0) {
+        tables.push(tableName);
+        tableDefinitions.set(tableName, {
+          name: tableName,
+          isView: false,
+          columns
+        });
+      }
+    }
   }
   const viewMatches = sqlContent.matchAll(
     /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+[`"]?(\w+)[`"]?/gi
   );
-  for (const match of viewMatches) {
-    const viewName = match[1];
+  for (const match2 of viewMatches) {
+    const viewName = match2[1];
     views.push(viewName);
   }
   return { tables, views, tableDefinitions };
 }
 function parseColumns(columnSection) {
   const columns = [];
-  const columnDefs = splitColumnDefinitions(columnSection);
+  const lines = columnSection.split("\n");
+  const columnDefs = [];
+  let current = "";
+  let parenDepth = 0;
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith("--")) continue;
+    for (const char of trimmedLine) {
+      if (char === "(") parenDepth++;
+      if (char === ")") parenDepth--;
+    }
+    current += " " + trimmedLine;
+    if (parenDepth === 0) {
+      if (trimmedLine.endsWith(",")) {
+        columnDefs.push(current.trim().slice(0, -1));
+        current = "";
+      } else if (!trimmedLine.includes("(") && (trimmedLine.match(/,?\s*$/) || trimmedLine.match(/COMMENT\s+'[^']*'\s*,?$/i))) {
+        columnDefs.push(current.trim().replace(/,$/, ""));
+        current = "";
+      }
+    }
+  }
+  if (current.trim()) {
+    columnDefs.push(current.trim().replace(/,$/, ""));
+  }
   for (const colDef of columnDefs) {
     const trimmed = colDef.trim();
-    if (trimmed.match(/^(PRIMARY\s+KEY|KEY|INDEX|UNIQUE|FOREIGN\s+KEY|CONSTRAINT|CHECK)/i)) {
+    if (!trimmed) continue;
+    if (trimmed.match(/^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i)) {
       continue;
     }
-    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/i);
+    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/is);
     if (!colMatch) continue;
     const name = colMatch[1];
-    const rest = colMatch[2];
-    const typeMatch = rest.match(/^([\w\s]+(?:\([^)]+\))?)/i);
-    const type = typeMatch ? typeMatch[1].trim() : "varchar(255)";
-    const nullable = !rest.match(/NOT\s+NULL/i);
-    const defaultMatch = rest.match(/DEFAULT\s+([^\s,)]+(?:\s+[^,]*)?)/i);
-    let defaultValue = defaultMatch ? defaultMatch[1].trim() : null;
-    if (defaultValue?.startsWith("'") && defaultValue.endsWith("'")) {
-      defaultValue = defaultValue.slice(1, -1);
+    let rest = colMatch[2].trim();
+    let type = "";
+    if (rest.match(/^(enum|set)\s*\(/i)) {
+      let depth = 1;
+      let pos = rest.indexOf("(") + 1;
+      while (pos < rest.length && depth > 0) {
+        if (rest[pos] === "(") depth++;
+        if (rest[pos] === ")") depth--;
+        pos++;
+      }
+      type = rest.substring(0, pos).replace(/\s+/g, " ").trim();
+      rest = rest.substring(pos).trim();
+    } else {
+      const typeMatch = rest.match(/^([\w]+(?:\([^)]+\))?)/i);
+      if (typeMatch) {
+        type = typeMatch[1].trim();
+        rest = rest.substring(typeMatch[0].length).trim();
+      }
     }
-    if (defaultValue?.toUpperCase() === "NULL") {
-      defaultValue = null;
+    if (!type) continue;
+    const nullable = !rest.match(/NOT\s+NULL/i);
+    let defaultValue = null;
+    const defaultMatch = rest.match(/DEFAULT\s+(\S+)/i);
+    if (defaultMatch) {
+      defaultValue = defaultMatch[1].trim();
+      if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
+        defaultValue = defaultValue.slice(1, -1);
+      }
+      const upper = defaultValue.toUpperCase();
+      if (upper === "NULL") {
+        defaultValue = null;
+      }
     }
     let comment = "";
-    const commentMatchSingle = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i);
-    const commentMatchDouble = rest.match(/COMMENT\s+"((?:[^"\\]|\\.)*)"/i);
-    if (commentMatchSingle) {
-      comment = commentMatchSingle[1].replace(/\\'/g, "'");
-    } else if (commentMatchDouble) {
-      comment = commentMatchDouble[1].replace(/\\"/g, '"');
+    const commentMatch = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i);
+    if (commentMatch) {
+      comment = commentMatch[1].replace(/\\'/g, "'");
     }
     const extras = [];
     if (rest.match(/AUTO_INCREMENT/i)) extras.push("auto_increment");
@@ -16225,50 +16279,11 @@ function parseColumns(columnSection) {
   }
   return columns;
 }
-function splitColumnDefinitions(columnSection) {
-  const parts = [];
-  let current = "";
-  let depth = 0;
-  let inString = false;
-  let stringChar = "";
-  for (let i = 0; i < columnSection.length; i++) {
-    const char = columnSection[i];
-    const prevChar = i > 0 ? columnSection[i - 1] : "";
-    if (!inString && (char === "'" || char === '"')) {
-      inString = true;
-      stringChar = char;
-      current += char;
-      continue;
-    }
-    if (inString && char === stringChar && prevChar !== "\\") {
-      inString = false;
-      stringChar = "";
-      current += char;
-      continue;
-    }
-    if (inString) {
-      current += char;
-      continue;
-    }
-    if (char === "(") depth++;
-    if (char === ")") depth--;
-    if (char === "," && depth === 0) {
-      parts.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  if (current.trim()) {
-    parts.push(current.trim());
-  }
-  return parts;
-}
 function extractSqlColumnDescriptions(config, tableName, tableDefinitions) {
   const table = tableDefinitions.get(tableName);
   if (!table) return [];
   return table.columns.map((col) => {
-    const enumMatch = col.type.match(/enum\(([^)]+)\)/i);
+    const enumMatch = col.type.match(/enum\s*\(([^)]+)\)/i);
     const enumOptions = enumMatch ? enumMatch[1].match(/'([^']+)'/g)?.map((s) => s.slice(1, -1)) : void 0;
     const dataType = col.type.split("(")[0].toLowerCase();
     return {

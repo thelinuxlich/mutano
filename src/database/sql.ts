@@ -36,23 +36,36 @@ export function extractSqlEntities(config: Config): {
   const views: string[] = []
   const tableDefinitions = new Map<string, ParsedTable>()
 
-  // Parse CREATE TABLE statements - handles both backtick and unquoted names
-  const tableMatches = sqlContent.matchAll(
-    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(([^;]+?)\)\s*(?:ENGINE|CHARSET|DEFAULT|COMMENT|;)/gi
-  )
-
-  for (const match of tableMatches) {
+  // Find all CREATE TABLE statements by looking for the pattern and matching parentheses
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(/gi
+  
+  let match
+  while ((match = tableRegex.exec(sqlContent)) !== null) {
     const tableName = match[1]
-    const columnSection = match[2]
+    const startIdx = match.index + match[0].length - 1 // Position of opening paren
     
-    const columns = parseColumns(columnSection)
+    // Find the matching closing parenthesis for the CREATE TABLE
+    let parenDepth = 1
+    let endIdx = startIdx + 1
+    while (parenDepth > 0 && endIdx < sqlContent.length) {
+      if (sqlContent[endIdx] === '(') parenDepth++
+      if (sqlContent[endIdx] === ')') parenDepth--
+      endIdx++
+    }
     
-    tables.push(tableName)
-    tableDefinitions.set(tableName, {
-      name: tableName,
-      isView: false,
-      columns
-    })
+    if (parenDepth === 0) {
+      const columnSection = sqlContent.substring(startIdx + 1, endIdx - 1)
+      const columns = parseColumns(columnSection)
+      
+      if (columns.length > 0) {
+        tables.push(tableName)
+        tableDefinitions.set(tableName, {
+          name: tableName,
+          isView: false,
+          columns
+        })
+      }
+    }
   }
 
   // Parse CREATE VIEW statements
@@ -63,66 +76,119 @@ export function extractSqlEntities(config: Config): {
   for (const match of viewMatches) {
     const viewName = match[1]
     views.push(viewName)
-    // Views need to be queried from database for column info
   }
 
   return { tables, views, tableDefinitions }
 }
 
 /**
- * Parse column definitions from CREATE TABLE statement
+ * Parse column definitions from CREATE TABLE statement body
  */
 function parseColumns(columnSection: string): ParsedColumn[] {
   const columns: ParsedColumn[] = []
   
-  // Split by comma but not inside parentheses (for enum values)
-  const columnDefs = splitColumnDefinitions(columnSection)
+  // Process line by line, tracking multi-line column definitions
+  const lines = columnSection.split('\n')
+  const columnDefs: string[] = []
+  let current = ''
+  let parenDepth = 0
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    if (!trimmedLine || trimmedLine.startsWith('--')) continue
+    
+    // Track parentheses depth for enums
+    for (const char of trimmedLine) {
+      if (char === '(') parenDepth++
+      if (char === ')') parenDepth--
+    }
+    
+    current += ' ' + trimmedLine
+    
+    // If at depth 0 and line ends with comma, or is a complete definition
+    if (parenDepth === 0) {
+      if (trimmedLine.endsWith(',')) {
+        columnDefs.push(current.trim().slice(0, -1)) // Remove trailing comma
+        current = ''
+      } else if (!trimmedLine.includes('(') && 
+                 (trimmedLine.match(/,?\s*$/) || 
+                  trimmedLine.match(/COMMENT\s+'[^']*'\s*,?$/i))) {
+        columnDefs.push(current.trim().replace(/,$/, ''))
+        current = ''
+      }
+    }
+  }
+  
+  // Add any remaining
+  if (current.trim()) {
+    columnDefs.push(current.trim().replace(/,$/, ''))
+  }
   
   for (const colDef of columnDefs) {
     const trimmed = colDef.trim()
+    if (!trimmed) continue
     
-    // Skip constraints (PRIMARY KEY, KEY, INDEX, UNIQUE, FOREIGN KEY, CONSTRAINT, CHECK)
-    if (trimmed.match(/^(PRIMARY\s+KEY|KEY|INDEX|UNIQUE|FOREIGN\s+KEY|CONSTRAINT|CHECK)/i)) {
+    // Skip constraints
+    if (trimmed.match(/^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i)) {
       continue
     }
     
-    // Parse column definition: `name` type constraints...
-    // Handle both backtick quoted and unquoted names
-    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/i)
+    // Parse column: `name` type [constraints...]
+    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/is)
     if (!colMatch) continue
     
     const name = colMatch[1]
-    const rest = colMatch[2]
+    let rest = colMatch[2].trim()
     
-    // Extract type (handles ENUM with parentheses)
-    const typeMatch = rest.match(/^([\w\s]+(?:\([^)]+\))?)/i)
-    const type = typeMatch ? typeMatch[1].trim() : 'varchar(255)'
+    // Extract type with special handling for multi-line enums
+    let type = ''
+    if (rest.match(/^(enum|set)\s*\(/i)) {
+      // Find the closing paren for this enum
+      let depth = 1
+      let pos = rest.indexOf('(') + 1
+      while (pos < rest.length && depth > 0) {
+        if (rest[pos] === '(') depth++
+        if (rest[pos] === ')') depth--
+        pos++
+      }
+      type = rest.substring(0, pos).replace(/\s+/g, ' ').trim()
+      rest = rest.substring(pos).trim()
+    } else {
+      // Regular type
+      const typeMatch = rest.match(/^([\w]+(?:\([^)]+\))?)/i)
+      if (typeMatch) {
+        type = typeMatch[1].trim()
+        rest = rest.substring(typeMatch[0].length).trim()
+      }
+    }
     
-    // Check for NULL/NOT NULL
+    if (!type) continue
+    
+    // Parse constraints
     const nullable = !rest.match(/NOT\s+NULL/i)
     
-    // Extract DEFAULT value
-    const defaultMatch = rest.match(/DEFAULT\s+([^\s,)]+(?:\s+[^,]*)?)/i)
-    let defaultValue = defaultMatch ? defaultMatch[1].trim() : null
-    // Clean up string defaults
-    if (defaultValue?.startsWith("'") && defaultValue.endsWith("'")) {
-      defaultValue = defaultValue.slice(1, -1)
-    }
-    if (defaultValue?.toUpperCase() === 'NULL') {
-      defaultValue = null
+    // Extract DEFAULT
+    let defaultValue: string | null = null
+    const defaultMatch = rest.match(/DEFAULT\s+(\S+)/i)
+    if (defaultMatch) {
+      defaultValue = defaultMatch[1].trim()
+      if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
+        defaultValue = defaultValue.slice(1, -1)
+      }
+      const upper = defaultValue.toUpperCase()
+      if (upper === 'NULL') {
+        defaultValue = null
+      }
     }
     
-    // Extract COMMENT - handle both single and double quotes, and special characters
+    // Extract COMMENT
     let comment = ''
-    const commentMatchSingle = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i)
-    const commentMatchDouble = rest.match(/COMMENT\s+"((?:[^"\\]|\\.)*)"/i)
-    if (commentMatchSingle) {
-      comment = commentMatchSingle[1].replace(/\\'/g, "'")
-    } else if (commentMatchDouble) {
-      comment = commentMatchDouble[1].replace(/\\"/g, '"')
+    const commentMatch = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i)
+    if (commentMatch) {
+      comment = commentMatch[1].replace(/\\'/g, "'")
     }
     
-    // Extract EXTRA (AUTO_INCREMENT, etc.)
+    // Extract EXTRA
     const extras: string[] = []
     if (rest.match(/AUTO_INCREMENT/i)) extras.push('auto_increment')
     if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push('on update CURRENT_TIMESTAMP')
@@ -141,58 +207,7 @@ function parseColumns(columnSection: string): ParsedColumn[] {
 }
 
 /**
- * Split column definitions respecting parentheses
- */
-function splitColumnDefinitions(columnSection: string): string[] {
-  const parts: string[] = []
-  let current = ''
-  let depth = 0
-  let inString = false
-  let stringChar = ''
-  
-  for (let i = 0; i < columnSection.length; i++) {
-    const char = columnSection[i]
-    const prevChar = i > 0 ? columnSection[i - 1] : ''
-    
-    // Track string literals
-    if (!inString && (char === "'" || char === '"')) {
-      inString = true
-      stringChar = char
-      current += char
-      continue
-    }
-    if (inString && char === stringChar && prevChar !== '\\') {
-      inString = false
-      stringChar = ''
-      current += char
-      continue
-    }
-    
-    if (inString) {
-      current += char
-      continue
-    }
-    
-    if (char === '(') depth++
-    if (char === ')') depth--
-    
-    if (char === ',' && depth === 0) {
-      parts.push(current.trim())
-      current = ''
-    } else {
-      current += char
-    }
-  }
-  
-  if (current.trim()) {
-    parts.push(current.trim())
-  }
-  
-  return parts
-}
-
-/**
- * Extract column descriptions for a table from SQL file
+ * Extract column descriptions for a table
  */
 export function extractSqlColumnDescriptions(
   config: Config,
@@ -203,13 +218,13 @@ export function extractSqlColumnDescriptions(
   if (!table) return []
   
   return table.columns.map(col => {
-    // Parse enum options if present
-    const enumMatch = col.type.match(/enum\(([^)]+)\)/i)
+    // Parse enum options
+    const enumMatch = col.type.match(/enum\s*\(([^)]+)\)/i)
     const enumOptions = enumMatch 
       ? enumMatch[1].match(/'([^']+)'/g)?.map(s => s.slice(1, -1))
       : undefined
     
-    // Extract base data type (without size/precision)
+    // Extract base data type
     const dataType = col.type.split('(')[0].toLowerCase()
     
     return {
