@@ -224,8 +224,8 @@ export function extractSqlColumnDescriptions(
   if (!table) return []
   
   return table.columns.map(col => {
-    // Parse enum options
-    const enumMatch = col.type.match(/enum\s*\(([^)]+)\)/i)
+    // Parse enum options - handle multi-line enums by using dotAll flag
+    const enumMatch = col.type.match(/enum\s*\(([\s\S]+)\)/i)
     const enumOptions = enumMatch 
       ? enumMatch[1].match(/'([^']+)'/g)?.map(s => s.slice(1, -1))
       : undefined

@@ -16286,7 +16286,7 @@ function extractSqlColumnDescriptions(config, tableName, tableDefinitions) {
   const table = tableDefinitions.get(tableName);
   if (!table) return [];
   return table.columns.map((col) => {
-    const enumMatch = col.type.match(/enum\s*\(([^)]+)\)/i);
+    const enumMatch = col.type.match(/enum\s*\(([\s\S]+)\)/i);
     const enumOptions = enumMatch ? enumMatch[1].match(/'([^']+)'/g)?.map((s) => s.slice(1, -1)) : void 0;
     const dataType = col.type.split("(")[0].toLowerCase();
     return {
