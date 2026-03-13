@@ -34,7 +34,7 @@ export function getType(
   let dataType = DataType ? (schemaType === 'prisma' ? DataType : DataType.toLowerCase()) : type
   
   // Handle MySQL tinyint(1) as boolean when tinyIntAsBoolean option is enabled (default true)
-  const isMySQL = schemaType === 'mysql'
+  const isMySQL = schemaType === 'mysql' || (schemaType === 'sql' && (config.origin as any).dialect === 'mysql')
   const tinyIntAsBoolean = isMySQL && (config.origin as any).tinyIntAsBoolean !== false
   const isTinyInt1 = isMySQL && dataType === 'tinyint' && Type.toLowerCase().includes('(1)')
   if (tinyIntAsBoolean && isTinyInt1) {
@@ -49,7 +49,9 @@ export function getType(
   const isKyselyDestination = destination.type === 'kysely'
   const isZodDestination = destination.type === 'zod'
 
-  const typeMappings = getTypeMappings(schemaType)
+  // Get dialect for SQL file origins
+  const dialect = schemaType === 'sql' ? (config.origin as any).dialect : undefined
+  const typeMappings = getTypeMappings(schemaType, dialect)
 
   const destKey = isZodDestination ? 'zod' : isTsDestination ? 'ts' : 'kysely'
 

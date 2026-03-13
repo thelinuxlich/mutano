@@ -139,15 +139,18 @@ export const enumRegex = /enum\(([^)]+)\)/
 /**
  * Get the appropriate type mappings for a database type
  */
-export function getTypeMappings(dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma') {
+export function getTypeMappings(dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma' | 'sql', dialect?: string) {
+  // For SQL files, use the dialect to determine mappings (default to mysql)
+  const effectiveType = dbType === 'sql' ? (dialect as 'mysql' | 'postgres' | 'sqlite' || 'mysql') : dbType
+  
   return {
-    dateTypes: dateTypes[dbType],
-    stringTypes: stringTypes[dbType],
-    bigIntTypes: bigIntTypes[dbType],
-    numberTypes: numberTypes[dbType],
-    decimalTypes: decimalTypes[dbType],
-    booleanTypes: booleanTypes[dbType],
-    enumTypes: enumTypes[dbType],
+    dateTypes: dateTypes[effectiveType],
+    stringTypes: stringTypes[effectiveType],
+    bigIntTypes: bigIntTypes[effectiveType],
+    numberTypes: numberTypes[effectiveType],
+    decimalTypes: decimalTypes[effectiveType],
+    booleanTypes: booleanTypes[effectiveType],
+    enumTypes: enumTypes[effectiveType],
   }
 }
 

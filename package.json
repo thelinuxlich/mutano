@@ -16,7 +16,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mrleebo/prisma-ast": "^0.13.1",
     "@types/fs-extra": "^11.0.4",
     "@types/pg": "^8.16.0",
     "@types/pluralize": "^0.0.33",

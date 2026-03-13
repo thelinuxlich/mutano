@@ -20,6 +20,10 @@ import {
   extractPrismaEntities,
   extractPrismaColumnDescriptions
 } from './database/prisma.js'
+import {
+  extractSqlEntities,
+  extractSqlColumnDescriptions
+} from './database/sql.js'
 import { defaultKyselyHeader, defaultZodHeader, kyselyJsonTypes } from './constants.js'
 export {
   extractTypeExpression,
@@ -37,6 +41,7 @@ export async function generate(config: Config): Promise<Record<string, string>> 
   let views: string[] = []
   let enumDeclarations: Record<string, string[]> = {}
   let db: ReturnType<typeof createDatabaseConnection> | null = null
+  let sqlTableDefinitions: Map<string, ReturnType<typeof extractSqlEntities>['tableDefinitions']> | null = null
 
   try {
     if (config.origin.type === 'prisma') {
@@ -45,6 +50,12 @@ export async function generate(config: Config): Promise<Record<string, string>> 
       views = prismaEntities.views
       enumDeclarations = prismaEntities.enumDeclarations
       config.enumDeclarations = enumDeclarations
+    } else if (config.origin.type === 'sql') {
+      const sqlEntities = extractSqlEntities(config)
+      tables = sqlEntities.tables
+      views = sqlEntities.views
+      sqlTableDefinitions = sqlEntities.tableDefinitions
+      // Note: Views from SQL files need database connection for column info
     } else {
       db = createDatabaseConnection(config)
       tables = await extractTables(db, config)
@@ -68,6 +79,8 @@ export async function generate(config: Config): Promise<Record<string, string>> 
       let describes: Desc[]
       if (config.origin.type === 'prisma') {
         describes = extractPrismaColumnDescriptions(config, entityName, enumDeclarations)
+      } else if (config.origin.type === 'sql') {
+        describes = extractSqlColumnDescriptions(config, entityName, sqlTableDefinitions!)
       } else {
         describes = await extractColumnDescriptions(db!, config, entityName)
       }
@@ -119,6 +132,8 @@ export async function generate(config: Config): Promise<Record<string, string>> 
         let describes: Desc[]
         if (config.origin.type === 'prisma') {
           describes = extractPrismaColumnDescriptions(config, entityName, enumDeclarations)
+        } else if (config.origin.type === 'sql') {
+          describes = extractSqlColumnDescriptions(config, entityName, sqlTableDefinitions!)
         } else {
           describes = await extractColumnDescriptions(db!, config, entityName)
         }

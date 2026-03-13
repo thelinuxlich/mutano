@@ -50,6 +50,11 @@ export interface Config {
         path: string
       }
     | {
+        type: 'sql'
+        path: string
+        dialect?: 'mysql' | 'postgres' | 'sqlite'
+      }
+    | {
         type: 'mysql'
         host: string
         port: number
