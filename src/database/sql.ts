@@ -76,9 +76,191 @@ export function extractSqlEntities(config: Config): {
   for (const match of viewMatches) {
     const viewName = match[1]
     views.push(viewName)
+    
+    // Parse view columns from the SELECT statement
+    const viewColumns = parseViewColumns(sqlContent, match.index + match[0].length, tableDefinitions)
+    
+    if (viewColumns.length > 0) {
+      tableDefinitions.set(viewName, {
+        name: viewName,
+        isView: true,
+        columns: viewColumns
+      })
+    }
   }
 
   return { tables, views, tableDefinitions }
+}
+
+/**
+ * Parse column definitions from CREATE VIEW statement
+ * Extracts column aliases from the SELECT clause and attempts to infer types from source tables
+ * 
+ * For views with table aliases (like `ud` for `users_data`), this function attempts to
+ * match column aliases (like `user_email`) to their source tables based on naming conventions
+ * and the column name prefixes.
+ */
+function parseViewColumns(
+  sqlContent: string,
+  startPos: number,
+  tableDefinitions: Map<string, ParsedTable>
+): ParsedColumn[] {
+  const columns: ParsedColumn[] = []
+
+  // Find the SELECT statement after CREATE VIEW ... AS
+  // Look for 'AS' keyword followed by SELECT
+  const remainingContent = sqlContent.substring(startPos)
+
+  // Match AS followed by SELECT (case insensitive, with optional whitespace/newlines)
+  const asSelectMatch = remainingContent.match(/\s*AS\s+SELECT\s+/i)
+  if (!asSelectMatch) return columns
+
+  const selectStart = asSelectMatch.index! + asSelectMatch[0].length
+  const selectContent = remainingContent.substring(selectStart)
+
+  // Find the end of the SELECT clause (look for FROM, WHERE, GROUP BY, HAVING, LIMIT, etc.)
+  // Use a regex that matches FROM at the start of a line or after whitespace
+  const fromMatch = selectContent.match(/\sFROM\s/i)
+  const selectClause = fromMatch ? selectContent.substring(0, fromMatch.index) : selectContent
+
+  // Parse column expressions - split by commas not inside parentheses
+  const columnExprs: string[] = []
+  let current = ''
+  let parenDepth = 0
+
+  for (let i = 0; i < selectClause.length; i++) {
+    const char = selectClause[i]
+
+    if (char === '(') parenDepth++
+    if (char === ')') parenDepth--
+
+    if (char === ',' && parenDepth === 0) {
+      columnExprs.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+
+  if (current.trim()) {
+    columnExprs.push(current.trim())
+  }
+
+  // Common table alias mappings based on naming conventions
+  // Maps column prefix patterns to likely source table names
+  const prefixToTable: Record<string, string[]> = {
+    'user_': ['users_data', 'ud'],
+    'company_': ['rise_entities', 'company'],
+    'team_': ['rise_entities', 'team'],
+    'user_relationship_': ['rise_entities', 'user_rel'],
+    'user_entity_': ['rise_entities', 'user_entity']
+  }
+
+  // Extract column name from each expression
+  for (const expr of columnExprs) {
+    if (!expr) continue
+
+    // Match column alias: expression AS `alias` or expression AS alias
+    const aliasMatch = expr.match(/\s+AS\s+[`"]?([^`"\s,]+)[`"]?\s*$/i)
+    if (aliasMatch) {
+      const name = aliasMatch[1]
+      // Try to infer type from source table reference
+      const sourceRefMatch = expr.match(/^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i)
+      const sourceTable = sourceRefMatch?.[1]
+      const sourceCol = sourceRefMatch?.[2]
+
+      let type = 'varchar(191)'
+      let nullable = true
+      let foundType = false
+
+      // First try: direct table lookup by alias (e.g., 'ud' -> table definition)
+      if (sourceTable && sourceCol) {
+        const table = tableDefinitions.get(sourceTable)
+        if (table) {
+          const col = table.columns.find(c => c.name === sourceCol)
+          if (col) {
+            type = col.type
+            nullable = col.nullable
+            foundType = true
+          }
+        }
+      }
+
+      // Second try: infer from column name prefix (e.g., 'user_email' -> look in 'users_data')
+      if (!foundType && sourceCol) {
+        for (const [prefix, tableNames] of Object.entries(prefixToTable)) {
+          if (name.startsWith(prefix)) {
+            // Try each possible table name for this prefix
+            for (const tableName of tableNames) {
+              const table = tableDefinitions.get(tableName)
+              if (table) {
+                const col = table.columns.find(c => c.name === sourceCol)
+                if (col) {
+                  type = col.type
+                  nullable = col.nullable
+                  foundType = true
+                  break
+                }
+              }
+            }
+            if (foundType) break
+          }
+        }
+      }
+
+      // Try to infer Kysely brand from column name for nanoid columns
+      let comment = ''
+      
+      // Special case for rise_account columns
+      if (name === 'user_rise_account') {
+        comment = '@kysely(UserRiseAccount)'
+      } else {
+        const nanoidMatch = name.match(/^(\w+)_nanoid$/)
+        if (nanoidMatch) {
+          const prefix = nanoidMatch[1]
+          // Map common prefixes to brand names
+          const brandMap: Record<string, string> = {
+            'user': 'UserNanoid',
+            'company': 'CompanyNanoid',
+            'team': 'TeamNanoid',
+            'document': 'DocumentNanoid',
+            'template': 'TemplateNanoid',
+            'entity': 'EntityNanoid',
+            'payment': 'PaymentNanoid',
+            'transaction': 'TransactionNanoid'
+          }
+          const brand = brandMap[prefix]
+          if (brand) {
+            comment = `@kysely(${brand})`
+          }
+        }
+      }
+
+      columns.push({
+        name,
+        type,
+        nullable,
+        defaultValue: null,
+        extra: '',
+        comment
+      })
+    } else {
+      // No alias - use the column name directly (remove table prefixes)
+      const colNameMatch = expr.match(/^(?:.*\.)?[`"]?([^`"\s,()]+)[`"]?\s*$/i)
+      if (colNameMatch) {
+        columns.push({
+          name: colNameMatch[1],
+          type: 'varchar(191)',
+          nullable: true,
+          defaultValue: null,
+          extra: '',
+          comment: ''
+        })
+      }
+    }
+  }
+
+  return columns
 }
 
 /**

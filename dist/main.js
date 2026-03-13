@@ -16189,8 +16189,137 @@ function extractSqlEntities(config) {
   for (const match2 of viewMatches) {
     const viewName = match2[1];
     views.push(viewName);
+    const viewColumns = parseViewColumns(sqlContent, match2.index + match2[0].length, tableDefinitions);
+    if (viewColumns.length > 0) {
+      tableDefinitions.set(viewName, {
+        name: viewName,
+        isView: true,
+        columns: viewColumns
+      });
+    }
   }
   return { tables, views, tableDefinitions };
+}
+function parseViewColumns(sqlContent, startPos, tableDefinitions) {
+  const columns = [];
+  const remainingContent = sqlContent.substring(startPos);
+  const asSelectMatch = remainingContent.match(/\s*AS\s+SELECT\s+/i);
+  if (!asSelectMatch) return columns;
+  const selectStart = asSelectMatch.index + asSelectMatch[0].length;
+  const selectContent = remainingContent.substring(selectStart);
+  const fromMatch = selectContent.match(/\sFROM\s/i);
+  const selectClause = fromMatch ? selectContent.substring(0, fromMatch.index) : selectContent;
+  const columnExprs = [];
+  let current = "";
+  let parenDepth = 0;
+  for (let i = 0; i < selectClause.length; i++) {
+    const char = selectClause[i];
+    if (char === "(") parenDepth++;
+    if (char === ")") parenDepth--;
+    if (char === "," && parenDepth === 0) {
+      columnExprs.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) {
+    columnExprs.push(current.trim());
+  }
+  const prefixToTable = {
+    "user_": ["users_data", "ud"],
+    "company_": ["rise_entities", "company"],
+    "team_": ["rise_entities", "team"],
+    "user_relationship_": ["rise_entities", "user_rel"],
+    "user_entity_": ["rise_entities", "user_entity"]
+  };
+  for (const expr of columnExprs) {
+    if (!expr) continue;
+    const aliasMatch = expr.match(/\s+AS\s+[`"]?([^`"\s,]+)[`"]?\s*$/i);
+    if (aliasMatch) {
+      const name = aliasMatch[1];
+      const sourceRefMatch = expr.match(/^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i);
+      const sourceTable = sourceRefMatch?.[1];
+      const sourceCol = sourceRefMatch?.[2];
+      let type = "varchar(191)";
+      let nullable = true;
+      let foundType = false;
+      if (sourceTable && sourceCol) {
+        const table = tableDefinitions.get(sourceTable);
+        if (table) {
+          const col = table.columns.find((c) => c.name === sourceCol);
+          if (col) {
+            type = col.type;
+            nullable = col.nullable;
+            foundType = true;
+          }
+        }
+      }
+      if (!foundType && sourceCol) {
+        for (const [prefix, tableNames] of Object.entries(prefixToTable)) {
+          if (name.startsWith(prefix)) {
+            for (const tableName of tableNames) {
+              const table = tableDefinitions.get(tableName);
+              if (table) {
+                const col = table.columns.find((c) => c.name === sourceCol);
+                if (col) {
+                  type = col.type;
+                  nullable = col.nullable;
+                  foundType = true;
+                  break;
+                }
+              }
+            }
+            if (foundType) break;
+          }
+        }
+      }
+      let comment = "";
+      if (name === "user_rise_account") {
+        comment = "@kysely(UserRiseAccount)";
+      } else {
+        const nanoidMatch = name.match(/^(\w+)_nanoid$/);
+        if (nanoidMatch) {
+          const prefix = nanoidMatch[1];
+          const brandMap = {
+            "user": "UserNanoid",
+            "company": "CompanyNanoid",
+            "team": "TeamNanoid",
+            "document": "DocumentNanoid",
+            "template": "TemplateNanoid",
+            "entity": "EntityNanoid",
+            "payment": "PaymentNanoid",
+            "transaction": "TransactionNanoid"
+          };
+          const brand = brandMap[prefix];
+          if (brand) {
+            comment = `@kysely(${brand})`;
+          }
+        }
+      }
+      columns.push({
+        name,
+        type,
+        nullable,
+        defaultValue: null,
+        extra: "",
+        comment
+      });
+    } else {
+      const colNameMatch = expr.match(/^(?:.*\.)?[`"]?([^`"\s,()]+)[`"]?\s*$/i);
+      if (colNameMatch) {
+        columns.push({
+          name: colNameMatch[1],
+          type: "varchar(191)",
+          nullable: true,
+          defaultValue: null,
+          extra: "",
+          comment: ""
+        });
+      }
+    }
+  }
+  return columns;
 }
 function parseColumns(columnSection) {
   const columns = [];
