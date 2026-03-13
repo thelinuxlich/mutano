@@ -2,7 +2,7 @@
 
 Convert database schemas to TypeScript types, Zod schemas, or Kysely definitions.
 
-- **Supports:** MySQL, PostgreSQL, SQLite, Prisma, **SQL DDL Files** 
+- **Supports:** MySQL, PostgreSQL, SQLite, Prisma, SQL DDL Files
 - **Features:** Views, Magic Comments, Type Overrides, Multiple Outputs
 
 ## Installation
