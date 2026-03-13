@@ -74,6 +74,10 @@ export function extractPrismaEntities(config: Config): {
           if (e.type === 'attribute') {
             return false
           }
+          // Skip items without a valid name (e.g., comments)
+          if (!e.name || typeof e.name !== 'string') {
+            return false
+          }
           // Check if enumerator has @ignore attribute
           if ('attributes' in e && e.attributes) {
             const hasIgnore = e.attributes.some((attr: Attribute) => attr.name === 'ignore')
@@ -104,6 +108,8 @@ export function extractPrismaEntities(config: Config): {
           // Fallback to enum name if no @map
           return e.name
         })
+        // Filter out any undefined/null values that might have slipped through
+        .filter((value): value is string => typeof value === 'string' && value !== 'undefined')
 
       enumDeclarations[enumName] = filteredEnumValues
     }

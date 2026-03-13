@@ -312,4 +312,70 @@ model Event {
     expect(eventContent).toContain('user.created')
     expect(eventContent).toContain('payment.sent')
   })
+
+  test('should handle Prisma enums with comments correctly', async () => {
+    const tempDir = join(tmpdir(), 'mutano-enum-comments-test-' + Date.now())
+    await mkdir(tempDir, { recursive: true })
+
+    const schemaPath = join(tempDir, 'schema.prisma')
+    const schemaContent = `
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum payroll_category {
+  // DEBIT Categories (Expenses)
+  salaries
+  bonus_expense
+  commissions
+  
+  // CREDIT Categories (Liabilities)
+  bank_account
+  tax_payable
+}
+
+model IntegrationAccount {
+  id                    Int              @id @default(autoincrement())
+  rise_payroll_category payroll_category
+}
+`
+
+    await writeFile(schemaPath, schemaContent)
+
+    const result = await generate({
+      origin: {
+        type: 'prisma',
+        path: schemaPath
+      },
+      destinations: [{
+        type: 'ts'
+      }],
+      dryRun: true
+    })
+
+    const fileName = Object.keys(result).find(k => k.includes('IntegrationAccount'))
+    const content = fileName ? result[fileName] : undefined
+    expect(content).toBeDefined()
+
+    // Should NOT contain 'undefined' in the enum
+    expect(content).not.toContain("'undefined'")
+
+    // Should contain the actual enum values
+    expect(content).toContain('salaries')
+    expect(content).toContain('bonus_expense')
+    expect(content).toContain('commissions')
+    expect(content).toContain('bank_account')
+    expect(content).toContain('tax_payable')
+
+    // Should NOT contain the comment text as enum values
+    expect(content).not.toContain('DEBIT')
+    expect(content).not.toContain('CREDIT')
+    expect(content).not.toContain('Expenses')
+    expect(content).not.toContain('Liabilities')
+  })
 })

@@ -68,8 +68,9 @@ export async function extractTables(db: ReturnType<typeof knex>, config: Config)
         WHERE table_schema = ? AND table_type = 'BASE TABLE'
       `, [origin.database])
       return mysqlTables[0]
-        .filter((row: any) => !hasTableIgnoreDirective(row.table_comment || ''))
-        .map((row: any) => row.table_name)
+        .filter((row: any) => !hasTableIgnoreDirective(row.TABLE_COMMENT || row.table_comment || ''))
+        .map((row: any) => row.TABLE_NAME || row.table_name)
+        .filter((name: any): name is string => typeof name === 'string' && name.length > 0)
 
     case 'postgres':
       const schema = origin.schema || 'public'
@@ -107,8 +108,9 @@ export async function extractViews(db: ReturnType<typeof knex>, config: Config):
         WHERE table_schema = ? AND table_type = 'VIEW'
       `, [origin.database])
       return mysqlViews[0]
-        .filter((row: any) => !hasTableIgnoreDirective(row.table_comment || ''))
-        .map((row: any) => row.table_name)
+        .filter((row: any) => !hasTableIgnoreDirective(row.TABLE_COMMENT || row.table_comment || ''))
+        .map((row: any) => row.TABLE_NAME || row.table_name)
+        .filter((name: any): name is string => typeof name === 'string' && name.length > 0)
 
     case 'postgres':
       const schema = origin.schema || 'public'
@@ -150,6 +152,7 @@ export async function extractColumnDescriptions(
           column_default as \`Default\`,
           extra as \`Extra\`,
           is_nullable as \`Null\`,
+          data_type as \`DataType\`,
           column_type as \`Type\`,
           column_comment as \`Comment\`
         FROM information_schema.columns
@@ -164,6 +167,7 @@ export async function extractColumnDescriptions(
           Default: row.Default,
           Extra: row.Extra || '',
           Null: row.Null,
+          DataType: row.DataType,
           Type: row.Type,
           Comment: row.Comment || '',
         }))

@@ -7,6 +7,7 @@ interface Desc {
     Extra: string;
     Null: string;
     Type: string;
+    DataType?: string;
     Comment: string;
     EnumOptions?: string[];
 }
@@ -48,6 +49,7 @@ interface Config {
         password: string;
         database: string;
         ssl?: Record<string, any>;
+        tinyIntAsBoolean?: boolean;
     } | {
         type: 'postgres';
         host: string;

@@ -75,8 +75,8 @@ export function createEntityList(
   views: string[]
 ): EntityInfo[] {
   const allEntities = [
-    ...tables.map(name => ({ name, type: 'table' as const })),
-    ...views.map(name => ({ name, type: 'view' as const }))
+    ...tables.filter((name): name is string => typeof name === 'string' && name.length > 0).map(name => ({ name, type: 'table' as const })),
+    ...views.filter((name): name is string => typeof name === 'string' && name.length > 0).map(name => ({ name, type: 'view' as const }))
   ]
   
   return allEntities.sort((a, b) => a.name.localeCompare(b.name))

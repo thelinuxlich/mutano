@@ -16,7 +16,7 @@ export const prismaValidTypes = [
 ] as const
 
 export const dateTypes = {
-  mysql: ['date', 'datetime', 'timestamp'] as string[],
+  mysql: ['date', 'datetime', 'datetime(3)', 'timestamp', 'timestamp(3)'] as string[],
   postgres: [
     'timestamp',
     'timestamp with time zone',

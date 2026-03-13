@@ -26,10 +26,21 @@ export function getType(
   destination: Destination,
   entityName?: string
 ): string {
-  const { Default, Extra, Null, Type, Comment, EnumOptions } = desc
+  const { Default, Extra, Null, Type, DataType, Comment, EnumOptions } = desc
   const schemaType = config.origin.type
   // For Prisma, preserve case; for others, convert to lowercase
   const type = schemaType === 'prisma' ? Type : Type.toLowerCase()
+  // Use DataType (normalized type from DB) for type category matching, fallback to Type
+  let dataType = DataType ? (schemaType === 'prisma' ? DataType : DataType.toLowerCase()) : type
+  
+  // Handle MySQL tinyint(1) as boolean when tinyIntAsBoolean option is enabled (default true)
+  const isMySQL = schemaType === 'mysql'
+  const tinyIntAsBoolean = isMySQL && (config.origin as any).tinyIntAsBoolean !== false
+  const isTinyInt1 = isMySQL && dataType === 'tinyint' && Type.toLowerCase().includes('(1)')
+  if (tinyIntAsBoolean && isTinyInt1) {
+    dataType = 'boolean'
+  }
+  
   const isNull = Null === 'YES'
   const hasDefaultValue = Default !== null
   const isGenerated = Extra.toLowerCase().includes('auto_increment') ||
@@ -120,8 +131,9 @@ export function getType(
   }
 
   // Handle JSON types first for Kysely (includes json, jsonb)
+  // Note: Use dataType (normalized type) instead of type to avoid matching enum('csv','json') as JSON
   if (isTsDestination || isKyselyDestination) {
-    const isJsonField = isJsonType(type)
+    const isJsonField = isJsonType(dataType)
     if (isKyselyDestination && isJsonField) {
       // Default JSON handling
       const shouldBeNullable =
@@ -134,8 +146,8 @@ export function getType(
   }
 
   // Handle enum types
-  const enumTypesForSchema = (typeMappings.enumTypes as any)[schemaType] || []
-  const isEnum = enumTypesForSchema.includes(type)
+  const enumTypesForSchema = typeMappings.enumTypes || []
+  const isEnum = enumTypesForSchema.includes(dataType)
 
   // For Prisma, also check if the type exists in enumDeclarations
   const isPrismaEnum = schemaType === 'prisma' && config.enumDeclarations && config.enumDeclarations[type]
@@ -143,7 +155,7 @@ export function getType(
   if (isEnum || isPrismaEnum) {
     let enumValues: string[] = []
 
-    if (schemaType === 'mysql' && type === 'enum') {
+    if (schemaType === 'mysql' && dataType === 'enum') {
       const match = Type.match(enumRegex)
       if (match) {
         enumValues = match[1].split(',').map((v) => v.trim().replace(/'/g, ''))
@@ -221,7 +233,7 @@ export function getType(
   }
 
   // Handle other types based on type mappings
-  return generateStandardType(op, desc, config, destination, typeMappings)
+  return generateStandardType(op, desc, config, destination, typeMappings, dataType)
 }
 
 /**
@@ -232,7 +244,8 @@ function generateStandardType(
   desc: Desc,
   config: Config,
   destination: Destination,
-  typeMappings: ReturnType<typeof getTypeMappings>
+  typeMappings: ReturnType<typeof getTypeMappings>,
+  dataType: string
 ): string {
   const { Default, Extra, Null, Type } = desc
   const schemaType = config.origin.type
@@ -257,7 +270,7 @@ function generateStandardType(
   let baseType: string
 
   // Determine base type
-  if (typeMappings.dateTypes.includes(type)) {
+  if (typeMappings.dateTypes.includes(dataType)) {
     if (isZodDestination) {
       const useDateType = (destination as any).useDateType
       if (useDateType) {
@@ -268,7 +281,7 @@ function generateStandardType(
     } else {
       baseType = 'Date'
     }
-  } else if (typeMappings.bigIntTypes.includes(type)) {
+  } else if (typeMappings.bigIntTypes.includes(dataType)) {
     if (isZodDestination) {
       baseType = 'z.string()'
     } else if (isKyselyDestination) {
@@ -276,7 +289,7 @@ function generateStandardType(
     } else {
       baseType = 'string'
     }
-  } else if (typeMappings.decimalTypes.includes(type)) {
+  } else if (typeMappings.decimalTypes.includes(dataType)) {
     if (isZodDestination) {
       baseType = 'z.string()'
       // Apply validation modifiers for decimal fields (similar to string fields)
@@ -294,14 +307,14 @@ function generateStandardType(
     } else {
       baseType = 'string'
     }
-  } else if (typeMappings.numberTypes.includes(type)) {
+  } else if (typeMappings.numberTypes.includes(dataType)) {
     if (isZodDestination) {
       baseType = 'z.number()'
       // Removed automatic .nonnegative() - integers can be negative
     } else {
       baseType = 'number'
     }
-  } else if (typeMappings.booleanTypes.includes(type)) {
+  } else if (typeMappings.booleanTypes.includes(dataType)) {
     if (isZodDestination) {
       const useBooleanType = (destination as any).useBooleanType
       if (useBooleanType) {
@@ -312,7 +325,7 @@ function generateStandardType(
     } else {
       baseType = 'boolean'
     }
-  } else if (typeMappings.stringTypes.includes(type)) {
+  } else if (typeMappings.stringTypes.includes(dataType)) {
     if (isZodDestination) {
       const useTrim = (destination as any).useTrim
       const requiredString = (destination as any).requiredString
@@ -346,11 +359,11 @@ function generateStandardType(
       let defaultValueFormatted = Default
 
       // Handle different types of default values
-      if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
+      if (typeMappings.stringTypes.includes(dataType) || typeMappings.dateTypes.includes(dataType)) {
         defaultValueFormatted = `'${Default}'`
-      } else if (typeMappings.booleanTypes.includes(type)) {
+      } else if (typeMappings.booleanTypes.includes(dataType)) {
         defaultValueFormatted = Default.toLowerCase() === 'true' ? 'true' : 'false'
-      } else if (typeMappings.numberTypes.includes(type)) {
+      } else if (typeMappings.numberTypes.includes(dataType)) {
         defaultValueFormatted = Default
       } else {
         // For other types, wrap in quotes
@@ -371,11 +384,11 @@ function generateStandardType(
     }
 
     // Special handling for date/datetime fields in main and selectable schemas
-    const isDateField = typeMappings.dateTypes.includes(type)
+    const isDateField = typeMappings.dateTypes.includes(dataType)
     const shouldDateBeOptional = isDateField && (hasDefaultValue || isGenerated) && (op === 'table' || op === 'selectable')
 
     // Special handling for ID fields with autoincrement/auto-generation in main and selectable schemas
-    const isIdField = typeMappings.numberTypes.includes(type) || typeMappings.bigIntTypes.includes(type) || typeMappings.stringTypes.includes(type)
+    const isIdField = typeMappings.numberTypes.includes(dataType) || typeMappings.bigIntTypes.includes(dataType) || typeMappings.stringTypes.includes(dataType)
     const shouldIdBeOptional = isIdField && isGenerated && (op === 'table' || op === 'selectable')
 
     if (shouldBeNullable && shouldBeOptional) {

@@ -43,8 +43,8 @@ function filterViews(views, includedViews, ignoredViews) {
 }
 function createEntityList(tables, views) {
   const allEntities = [
-    ...tables.map((name) => ({ name, type: "table" })),
-    ...views.map((name) => ({ name, type: "view" }))
+    ...tables.filter((name) => typeof name === "string" && name.length > 0).map((name) => ({ name, type: "table" })),
+    ...views.filter((name) => typeof name === "string" && name.length > 0).map((name) => ({ name, type: "view" }))
   ];
   return allEntities.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -60,7 +60,7 @@ function applyInflection(name, inflection) {
 }
 
 const dateTypes = {
-  mysql: ["date", "datetime", "timestamp"],
+  mysql: ["date", "datetime", "datetime(3)", "timestamp", "timestamp(3)"],
   postgres: [
     "timestamp",
     "timestamp with time zone",
@@ -219,9 +219,16 @@ const hasTableIgnoreDirective = (comment) => {
 };
 
 function getType(op, desc, config, destination, entityName) {
-  const { Default, Extra, Null, Type, Comment, EnumOptions } = desc;
+  const { Default, Extra, Null, Type, DataType, Comment, EnumOptions } = desc;
   const schemaType = config.origin.type;
   const type = schemaType === "prisma" ? Type : Type.toLowerCase();
+  let dataType = DataType ? schemaType === "prisma" ? DataType : DataType.toLowerCase() : type;
+  const isMySQL = schemaType === "mysql";
+  const tinyIntAsBoolean = isMySQL && config.origin.tinyIntAsBoolean !== false;
+  const isTinyInt1 = isMySQL && dataType === "tinyint" && Type.toLowerCase().includes("(1)");
+  if (tinyIntAsBoolean && isTinyInt1) {
+    dataType = "boolean";
+  }
   const isNull = Null === "YES";
   const hasDefaultValue = Default !== null;
   const isGenerated = Extra.toLowerCase().includes("auto_increment") || Extra.toLowerCase().includes("default_generated");
@@ -278,18 +285,18 @@ function getType(op, desc, config, destination, entityName) {
     }
   }
   if (isTsDestination || isKyselyDestination) {
-    const isJsonField = isJsonType(type);
+    const isJsonField = isJsonType(dataType);
     if (isKyselyDestination && isJsonField) {
       const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
       return shouldBeNullable ? "Json | null" : "Json";
     }
   }
-  const enumTypesForSchema = typeMappings.enumTypes[schemaType] || [];
-  const isEnum = enumTypesForSchema.includes(type);
+  const enumTypesForSchema = typeMappings.enumTypes || [];
+  const isEnum = enumTypesForSchema.includes(dataType);
   const isPrismaEnum = schemaType === "prisma" && config.enumDeclarations && config.enumDeclarations[type];
   if (isEnum || isPrismaEnum) {
     let enumValues = [];
-    if (schemaType === "mysql" && type === "enum") {
+    if (schemaType === "mysql" && dataType === "enum") {
       const match = Type.match(enumRegex);
       if (match) {
         enumValues = match[1].split(",").map((v) => v.trim().replace(/'/g, ""));
@@ -343,12 +350,12 @@ function getType(op, desc, config, destination, entityName) {
       }
     }
   }
-  return generateStandardType(op, desc, config, destination, typeMappings);
+  return generateStandardType(op, desc, config, destination, typeMappings, dataType);
 }
-function generateStandardType(op, desc, config, destination, typeMappings) {
+function generateStandardType(op, desc, config, destination, typeMappings, dataType) {
   const { Default, Extra, Null, Type } = desc;
   const schemaType = config.origin.type;
-  const type = schemaType === "prisma" ? Type : Type.toLowerCase();
+  schemaType === "prisma" ? Type : Type.toLowerCase();
   const isNull = Null === "YES";
   const hasDefaultValue = Default !== null;
   const isGenerated = Extra.toLowerCase().includes("auto_increment") || Extra.toLowerCase().includes("default_generated");
@@ -357,7 +364,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
   const shouldBeNullable = isNull;
   const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
   let baseType;
-  if (typeMappings.dateTypes.includes(type)) {
+  if (typeMappings.dateTypes.includes(dataType)) {
     if (isZodDestination) {
       const useDateType = destination.useDateType;
       if (useDateType) {
@@ -368,7 +375,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     } else {
       baseType = "Date";
     }
-  } else if (typeMappings.bigIntTypes.includes(type)) {
+  } else if (typeMappings.bigIntTypes.includes(dataType)) {
     if (isZodDestination) {
       baseType = "z.string()";
     } else if (isKyselyDestination) {
@@ -376,7 +383,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     } else {
       baseType = "string";
     }
-  } else if (typeMappings.decimalTypes.includes(type)) {
+  } else if (typeMappings.decimalTypes.includes(dataType)) {
     if (isZodDestination) {
       baseType = "z.string()";
       if (op !== "selectable") {
@@ -390,13 +397,13 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     } else {
       baseType = "string";
     }
-  } else if (typeMappings.numberTypes.includes(type)) {
+  } else if (typeMappings.numberTypes.includes(dataType)) {
     if (isZodDestination) {
       baseType = "z.number()";
     } else {
       baseType = "number";
     }
-  } else if (typeMappings.booleanTypes.includes(type)) {
+  } else if (typeMappings.booleanTypes.includes(dataType)) {
     if (isZodDestination) {
       const useBooleanType = destination.useBooleanType;
       if (useBooleanType) {
@@ -407,7 +414,7 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     } else {
       baseType = "boolean";
     }
-  } else if (typeMappings.stringTypes.includes(type)) {
+  } else if (typeMappings.stringTypes.includes(dataType)) {
     if (isZodDestination) {
       const useTrim = destination.useTrim;
       const requiredString = destination.requiredString;
@@ -425,11 +432,11 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
     const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
     if ((op === "table" || op === "insertable" || op === "updateable") && hasDefaultValue && Default !== null && !isGenerated) {
       let defaultValueFormatted = Default;
-      if (typeMappings.stringTypes.includes(type) || typeMappings.dateTypes.includes(type)) {
+      if (typeMappings.stringTypes.includes(dataType) || typeMappings.dateTypes.includes(dataType)) {
         defaultValueFormatted = `'${Default}'`;
-      } else if (typeMappings.booleanTypes.includes(type)) {
+      } else if (typeMappings.booleanTypes.includes(dataType)) {
         defaultValueFormatted = Default.toLowerCase() === "true" ? "true" : "false";
-      } else if (typeMappings.numberTypes.includes(type)) {
+      } else if (typeMappings.numberTypes.includes(dataType)) {
         defaultValueFormatted = Default;
       } else {
         defaultValueFormatted = `'${Default}'`;
@@ -444,9 +451,9 @@ function generateStandardType(op, desc, config, destination, typeMappings) {
         return `${baseType}.default(${defaultValueFormatted})`;
       }
     }
-    const isDateField = typeMappings.dateTypes.includes(type);
+    const isDateField = typeMappings.dateTypes.includes(dataType);
     const shouldDateBeOptional = isDateField && (hasDefaultValue || isGenerated) && (op === "table" || op === "selectable");
-    const isIdField = typeMappings.numberTypes.includes(type) || typeMappings.bigIntTypes.includes(type) || typeMappings.stringTypes.includes(type);
+    const isIdField = typeMappings.numberTypes.includes(dataType) || typeMappings.bigIntTypes.includes(dataType) || typeMappings.stringTypes.includes(dataType);
     const shouldIdBeOptional = isIdField && isGenerated && (op === "table" || op === "selectable");
     if (shouldBeNullable && shouldBeOptional) {
       return `${baseType}.${nullableMethod}()`;
@@ -808,7 +815,7 @@ async function extractTables(db, config) {
         FROM information_schema.tables
         WHERE table_schema = ? AND table_type = 'BASE TABLE'
       `, [origin.database]);
-      return mysqlTables[0].filter((row) => !hasTableIgnoreDirective(row.table_comment || "")).map((row) => row.table_name);
+      return mysqlTables[0].filter((row) => !hasTableIgnoreDirective(row.TABLE_COMMENT || row.table_comment || "")).map((row) => row.TABLE_NAME || row.table_name).filter((name) => typeof name === "string" && name.length > 0);
     case "postgres":
       const schema = origin.schema || "public";
       const postgresTables = await db.raw(`
@@ -837,7 +844,7 @@ async function extractViews(db, config) {
         FROM information_schema.tables
         WHERE table_schema = ? AND table_type = 'VIEW'
       `, [origin.database]);
-      return mysqlViews[0].filter((row) => !hasTableIgnoreDirective(row.table_comment || "")).map((row) => row.table_name);
+      return mysqlViews[0].filter((row) => !hasTableIgnoreDirective(row.TABLE_COMMENT || row.table_comment || "")).map((row) => row.TABLE_NAME || row.table_name).filter((name) => typeof name === "string" && name.length > 0);
     case "postgres":
       const schema = origin.schema || "public";
       const postgresViews = await db.raw(`
@@ -867,6 +874,7 @@ async function extractColumnDescriptions(db, config, tableName) {
           column_default as \`Default\`,
           extra as \`Extra\`,
           is_nullable as \`Null\`,
+          data_type as \`DataType\`,
           column_type as \`Type\`,
           column_comment as \`Comment\`
         FROM information_schema.columns
@@ -878,6 +886,7 @@ async function extractColumnDescriptions(db, config, tableName) {
         Default: row.Default,
         Extra: row.Extra || "",
         Null: row.Null,
+        DataType: row.DataType,
         Type: row.Type,
         Comment: row.Comment || ""
       }));
@@ -951,6 +960,9 @@ function extractPrismaEntities(config) {
         if (e.type === "attribute") {
           return false;
         }
+        if (!e.name || typeof e.name !== "string") {
+          return false;
+        }
         if ("attributes" in e && e.attributes) {
           const hasIgnore = e.attributes.some((attr) => attr.name === "ignore");
           if (hasIgnore) {
@@ -975,7 +987,7 @@ function extractPrismaEntities(config) {
           }
         }
         return e.name;
-      });
+      }).filter((value) => typeof value === "string" && value !== "undefined");
       enumDeclarations[enumName] = filteredEnumValues;
     }
   }

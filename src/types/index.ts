@@ -8,6 +8,7 @@ export interface Desc {
   Extra: string
   Null: string
   Type: string
+  DataType?: string
   Comment: string
   EnumOptions?: string[]
 }
@@ -57,6 +58,7 @@ export interface Config {
         database: string
         // biome-ignore lint/suspicious/noExplicitAny: ok
         ssl?: Record<string, any>
+        tinyIntAsBoolean?: boolean
       }
     | {
         type: 'postgres'
