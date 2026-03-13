@@ -2,7 +2,7 @@
 
 Convert database schemas to TypeScript types, Zod schemas, or Kysely definitions.
 
-- **Supports:** MySQL, PostgreSQL, SQLite, Prisma 
+- **Supports:** MySQL, PostgreSQL, SQLite, Prisma, **SQL DDL Files** 
 - **Features:** Views, Magic Comments, Type Overrides, Multiple Outputs
 
 ## Installation
@@ -16,10 +16,10 @@ npm install mutano
 ```typescript
 import { generate } from 'mutano'
 
-// Basic usage
+// Basic usage with database
 await generate({
   origin: {
-    type: 'mysql', // or 'postgres', 'sqlite', 'prisma'
+    type: 'mysql', // or 'postgres', 'sqlite', 'prisma', 'sql'
     host: '127.0.0.1',
     port: 3306,
     user: 'root',
@@ -28,6 +28,19 @@ await generate({
   },
   destinations: [{
     type: 'zod', // or 'ts', 'kysely'
+    folder: './generated'
+  }]
+})
+
+// Using SQL DDL files (no database required)
+await generate({
+  origin: {
+    type: 'sql',
+    path: './schemas/myapp.sql', // Path to SQL file
+    dialect: 'mysql' // or 'postgres', 'sqlite'
+  },
+  destinations: [{
+    type: 'zod',
     folder: './generated'
   }]
 })
@@ -128,6 +141,13 @@ export type UpdateableUser = Updateable<User>;
 {
   type: 'prisma',
   path: string
+}
+
+// SQL DDL Files (no database required)
+{
+  type: 'sql',
+  path: string, // Path to .sql file with CREATE TABLE statements
+  dialect: 'mysql' | 'postgres' | 'sqlite' // Determines type mappings
 }
 ```
 
