@@ -16249,7 +16249,7 @@ function parseColumns(columnSection) {
     if (!type) continue;
     const nullable = !rest.match(/NOT\s+NULL/i);
     let defaultValue = null;
-    const defaultMatch = rest.match(/DEFAULT\s+(\S+)/i);
+    const defaultMatch = rest.match(/DEFAULT\s+('(?:[^'\\]|\\.)*'|\S+)/i);
     if (defaultMatch) {
       defaultValue = defaultMatch[1].trim();
       if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {

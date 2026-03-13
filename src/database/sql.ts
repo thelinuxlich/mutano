@@ -167,11 +167,13 @@ function parseColumns(columnSection: string): ParsedColumn[] {
     // Parse constraints
     const nullable = !rest.match(/NOT\s+NULL/i)
     
-    // Extract DEFAULT
+    // Extract DEFAULT - handle quoted strings with spaces
     let defaultValue: string | null = null
-    const defaultMatch = rest.match(/DEFAULT\s+(\S+)/i)
+    // Match DEFAULT followed by either a quoted string or a non-whitespace value
+    const defaultMatch = rest.match(/DEFAULT\s+('(?:[^'\\]|\\.)*'|\S+)/i)
     if (defaultMatch) {
       defaultValue = defaultMatch[1].trim()
+      // Handle quoted strings
       if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
         defaultValue = defaultValue.slice(1, -1)
       }
