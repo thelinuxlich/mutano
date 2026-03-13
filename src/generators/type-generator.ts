@@ -157,7 +157,10 @@ export function getType(
   if (isEnum || isPrismaEnum) {
     let enumValues: string[] = []
 
-    if (schemaType === 'mysql' && dataType === 'enum') {
+    // Check if this is a MySQL enum (including SQL files with MySQL dialect)
+    const isMySQLEnum = (schemaType === 'mysql' || (schemaType === 'sql' && dialect === 'mysql')) && dataType === 'enum'
+
+    if (isMySQLEnum) {
       const match = Type.match(enumRegex)
       if (match) {
         enumValues = match[1].split(',').map((v) => v.trim().replace(/'/g, ''))

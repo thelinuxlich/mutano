@@ -300,7 +300,8 @@ function getType(op, desc, config, destination, entityName) {
   const isPrismaEnum = schemaType === "prisma" && config.enumDeclarations && config.enumDeclarations[type];
   if (isEnum || isPrismaEnum) {
     let enumValues = [];
-    if (schemaType === "mysql" && dataType === "enum") {
+    const isMySQLEnum = (schemaType === "mysql" || schemaType === "sql" && dialect === "mysql") && dataType === "enum";
+    if (isMySQLEnum) {
       const match = Type.match(enumRegex);
       if (match) {
         enumValues = match[1].split(",").map((v) => v.trim().replace(/'/g, ""));
@@ -16248,6 +16249,9 @@ function parseColumns(columnSection) {
     }
     if (!type) continue;
     const nullable = !rest.match(/NOT\s+NULL/i);
+    const extras = [];
+    if (rest.match(/AUTO_INCREMENT/i)) extras.push("auto_increment");
+    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push("on update CURRENT_TIMESTAMP");
     let defaultValue = null;
     const defaultMatch = rest.match(/DEFAULT\s+('(?:[^'\\]|\\.)*'|\S+)/i);
     if (defaultMatch) {
@@ -16258,6 +16262,8 @@ function parseColumns(columnSection) {
       const upper = defaultValue.toUpperCase();
       if (upper === "NULL") {
         defaultValue = null;
+      } else if (upper.startsWith("CURRENT_TIMESTAMP")) {
+        extras.push("DEFAULT_GENERATED");
       }
     }
     let comment = "";
@@ -16265,9 +16271,6 @@ function parseColumns(columnSection) {
     if (commentMatch) {
       comment = commentMatch[1].replace(/\\'/g, "'");
     }
-    const extras = [];
-    if (rest.match(/AUTO_INCREMENT/i)) extras.push("auto_increment");
-    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push("on update CURRENT_TIMESTAMP");
     columns.push({
       name,
       type,

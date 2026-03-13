@@ -167,6 +167,11 @@ function parseColumns(columnSection: string): ParsedColumn[] {
     // Parse constraints
     const nullable = !rest.match(/NOT\s+NULL/i)
     
+    // Extract EXTRA first (before processing DEFAULT)
+    const extras: string[] = []
+    if (rest.match(/AUTO_INCREMENT/i)) extras.push('auto_increment')
+    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push('on update CURRENT_TIMESTAMP')
+    
     // Extract DEFAULT - handle quoted strings with spaces
     let defaultValue: string | null = null
     // Match DEFAULT followed by either a quoted string or a non-whitespace value
@@ -180,6 +185,10 @@ function parseColumns(columnSection: string): ParsedColumn[] {
       const upper = defaultValue.toUpperCase()
       if (upper === 'NULL') {
         defaultValue = null
+      } else if (upper.startsWith('CURRENT_TIMESTAMP')) {
+        // CURRENT_TIMESTAMP defaults should be treated as generated (like MySQL driver does)
+        // Set extra to indicate this is a default-generated field
+        extras.push('DEFAULT_GENERATED')
       }
     }
     
@@ -189,11 +198,6 @@ function parseColumns(columnSection: string): ParsedColumn[] {
     if (commentMatch) {
       comment = commentMatch[1].replace(/\\'/g, "'")
     }
-    
-    // Extract EXTRA
-    const extras: string[] = []
-    if (rest.match(/AUTO_INCREMENT/i)) extras.push('auto_increment')
-    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push('on update CURRENT_TIMESTAMP')
     
     columns.push({
       name,

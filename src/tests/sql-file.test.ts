@@ -165,4 +165,93 @@ CREATE TABLE \`comments\` (\`id\` int NOT NULL PRIMARY KEY);
     // Cleanup
     rmSync(tempDir, { recursive: true })
   })
+
+  it('should properly extract enum values for single-line enum', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-sql-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+    
+    const sqlContent = `
+CREATE TABLE \`test\` (
+    \`id\` int NOT NULL,
+    \`status\` enum('active','inactive','pending') NOT NULL,
+    PRIMARY KEY (\`id\`)
+);
+`
+    
+    writeFileSync(sqlFile, sqlContent)
+    
+    const outputFolder = join(tempDir, 'output')
+    
+    const results = await generate({
+      origin: {
+        type: 'sql',
+        path: sqlFile,
+        dialect: 'mysql'
+      },
+      destinations: [
+        {
+          type: 'zod',
+          folder: outputFolder,
+          version: 4,
+          nullish: true
+        }
+      ],
+      silent: true
+    })
+    
+    const testZod = results[join(outputFolder, 'test.zod.ts')]
+    expect(testZod).toBeDefined()
+    // Should contain z.enum with the actual values, not just z.string()
+    expect(testZod).toContain("z.enum(['active','inactive','pending'])")
+    
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
+
+  it('should properly extract enum values for multi-line enum', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-sql-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+    
+    // Multi-line enum definition (common in formatted SQL)
+    const sqlContent = `
+CREATE TABLE \`test\` (
+    \`id\` int NOT NULL,
+    \`status\` enum(
+        'active',
+        'inactive',
+        'pending'
+    ) NOT NULL,
+    PRIMARY KEY (\`id\`)
+);
+`
+    
+    writeFileSync(sqlFile, sqlContent)
+    
+    const outputFolder = join(tempDir, 'output')
+    
+    const results = await generate({
+      origin: {
+        type: 'sql',
+        path: sqlFile,
+        dialect: 'mysql'
+      },
+      destinations: [
+        {
+          type: 'zod',
+          folder: outputFolder,
+          version: 4,
+          nullish: true
+        }
+      ],
+      silent: true
+    })
+    
+    const testZod = results[join(outputFolder, 'test.zod.ts')]
+    expect(testZod).toBeDefined()
+    // Should contain z.enum with the actual values, not just z.string()
+    expect(testZod).toContain("z.enum(['active','inactive','pending'])")
+    
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
 })
