@@ -254,4 +254,80 @@ CREATE TABLE \`test\` (
     // Cleanup
     rmSync(tempDir, { recursive: true })
   })
+
+  it('should throw an error when magic comments are used on enum columns', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-sql-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+
+    const sqlContent = `
+CREATE TABLE \`test\` (
+    \`id\` int NOT NULL,
+    \`status\` enum('active','inactive') DEFAULT NULL COMMENT '@kysely(ActiveStatus | null)',
+    PRIMARY KEY (\`id\`)
+);
+`
+
+    writeFileSync(sqlFile, sqlContent)
+
+    const outputFolder = join(tempDir, 'output')
+
+    await expect(
+      generate({
+        origin: {
+          type: 'sql',
+          path: sqlFile,
+          dialect: 'mysql'
+        },
+        destinations: [
+          {
+            type: 'zod',
+            folder: outputFolder,
+            version: 4
+          }
+        ],
+        silent: true
+      })
+    ).rejects.toThrow(/Magic comments are not supported on enum\/set columns/)
+
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
+
+  it('should throw an error when @zod magic comments are used on enum columns', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-sql-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+
+    const sqlContent = `
+CREATE TABLE \`test\` (
+    \`id\` int NOT NULL,
+    \`status\` enum('active','inactive') NOT NULL COMMENT '@zod(z.enum(["active", "inactive"]))',
+    PRIMARY KEY (\`id\`)
+);
+`
+
+    writeFileSync(sqlFile, sqlContent)
+
+    const outputFolder = join(tempDir, 'output')
+
+    await expect(
+      generate({
+        origin: {
+          type: 'sql',
+          path: sqlFile,
+          dialect: 'mysql'
+        },
+        destinations: [
+          {
+            type: 'zod',
+            folder: outputFolder,
+            version: 4
+          }
+        ],
+        silent: true
+      })
+    ).rejects.toThrow(/Magic comments are not supported on enum\/set columns/)
+
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
 })
