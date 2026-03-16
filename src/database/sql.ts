@@ -157,15 +157,50 @@ function parseViewColumns(
   }
 
   // Extract column name from each expression
-  for (const expr of columnExprs) {
+  for (let i = 0; i < columnExprs.length; i++) {
+    let expr = columnExprs[i]
     if (!expr) continue
 
+    // Extract inline SQL comment (--) if present - used for type overrides
+    // Comments can be at the end of the current expression or at the start of the next
+    // (SQL puts comments after the comma, so they end up with the next column when splitting)
+    let inlineComment = ''
+
+    // Check for inline comment at the END of current expression
+    const endCommentMatch = expr.match(/--\s*(.+)$/)
+    if (endCommentMatch) {
+      inlineComment = endCommentMatch[1].trim()
+      expr = expr.replace(/--\s*.+$/, '').trim()
+    }
+
+    // Check for inline comment at the START of current expression (from previous column's trailing comment)
+    const startCommentMatch = expr.match(/^--\s*(.+?)\n/)
+    if (startCommentMatch && !inlineComment) {
+      inlineComment = startCommentMatch[1].trim()
+      expr = expr.replace(/^--\s*.+?\n/, '').trim()
+    }
+
+    // Also check if there's a comment in the next expression that belongs to this column
+    // (This handles the case where the comment is on the same line after the comma)
+    const nextExpr = columnExprs[i + 1]
+    if (nextExpr && !inlineComment) {
+      const nextStartCommentMatch = nextExpr.match(/^--\s*(.+?)(?:\n|$)/)
+      if (nextStartCommentMatch) {
+        inlineComment = nextStartCommentMatch[1].trim()
+        // Remove the comment from the next expression so it doesn't process again
+        columnExprs[i + 1] = nextExpr.replace(/^--\s*.+?(?:\n|$)/, '').trim()
+      }
+    }
+
     // Match column alias: expression AS `alias` or expression AS alias
-    const aliasMatch = expr.match(/\s+AS\s+[`"]?([^`"\s,]+)[`"]?\s*$/i)
+    // Also handle case where there's an inline comment after the alias
+    const aliasMatch = expr.match(/\s+AS\s+[`"]?([^`"\s,]+)[`"]?\s*(?:--.*)?$/i)
     if (aliasMatch) {
       const name = aliasMatch[1]
       // Try to infer type from source table reference
-      const sourceRefMatch = expr.match(/^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i)
+      // Remove inline comment before matching
+      const exprWithoutComment = expr.replace(/--.*$/, '')
+      const sourceRefMatch = exprWithoutComment.match(/^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i)
       const sourceTable = sourceRefMatch?.[1]
       const sourceCol = sourceRefMatch?.[2]
 
@@ -240,7 +275,11 @@ function parseViewColumns(
       }
 
       // Use the comment inherited from the source table column
+      // Allow inline SQL comment to override the inherited comment
       let comment = sourceColumnComment
+      if (inlineComment) {
+        comment = inlineComment
+      }
 
       columns.push({
         name,

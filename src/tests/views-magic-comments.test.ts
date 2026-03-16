@@ -604,4 +604,117 @@ JOIN users_data ud ON ud.nanoid = re.nanoid;
     // Cleanup
     rmSync(tempDir, { recursive: true })
   })
+
+  test('should support inline SQL comments for type overrides in views', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-view-inline-comment-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+
+    // SQL with tables and a view that uses inline SQL comments to override types
+    const sqlContent = `
+CREATE TABLE \`rise_entities\` (
+    \`nanoid\` varchar(191) NOT NULL,
+    \`riseid\` varchar(191) NOT NULL COMMENT '@kysely(CompanyRiseid | UserRiseid | TeamRiseid)',
+    PRIMARY KEY (\`nanoid\`)
+);
+
+CREATE VIEW \`user_team_relationships_view\` AS
+SELECT
+    \`company\`.\`nanoid\` AS \`company_nanoid\`, -- @kysely(CompanyNanoid)
+    \`company\`.\`riseid\` AS \`company_riseid\`,
+    \`team\`.\`nanoid\` AS \`team_nanoid\`, -- @kysely(TeamNanoid)
+    \`team\`.\`riseid\` AS \`team_riseid\`
+FROM rise_entities company
+JOIN rise_entities team ON team.parent_riseid = company.riseid;
+`
+
+    writeFileSync(sqlFile, sqlContent)
+
+    const outputFolder = join(tempDir, 'output')
+
+    const results = await generate({
+      origin: {
+        type: 'sql',
+        path: sqlFile,
+        dialect: 'mysql'
+      },
+      destinations: [
+        {
+          type: 'kysely',
+          folder: outputFolder,
+          outFile: join(outputFolder, 'db.ts')
+        }
+      ],
+      includeViews: true,
+      magicComments: true,
+      silent: true
+    })
+
+    // Check Kysely output - inline comments should override inherited types
+    const kyselyOutput = results[join(outputFolder, 'db.ts')]
+    expect(kyselyOutput).toBeDefined()
+    expect(kyselyOutput).toContain('export interface UserTeamRelationshipsViewView {')
+    // company_nanoid should use the inline comment override
+    expect(kyselyOutput).toContain('company_nanoid: CompanyNanoid;')
+    // team_nanoid should use the inline comment override
+    expect(kyselyOutput).toContain('team_nanoid: TeamNanoid;')
+    // company_riseid should inherit from source table (no inline override)
+    expect(kyselyOutput).toContain('company_riseid: CompanyRiseid | UserRiseid | TeamRiseid;')
+    // team_riseid should inherit from source table (no inline override)
+    expect(kyselyOutput).toContain('team_riseid: CompanyRiseid | UserRiseid | TeamRiseid;')
+
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
+
+  test('should support @zod inline SQL comments for type overrides in views', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-view-zod-inline-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+
+    const sqlContent = `
+CREATE TABLE \`users\` (
+    \`id\` int NOT NULL,
+    \`email\` varchar(191) NOT NULL,
+    PRIMARY KEY (\`id\`)
+);
+
+CREATE VIEW \`user_view\` AS
+SELECT
+    \`u\`.\`id\` AS \`user_id\`, -- @zod(z.number().positive())
+    \`u\`.\`email\` AS \`user_email\`
+FROM users u;
+`
+
+    writeFileSync(sqlFile, sqlContent)
+
+    const outputFolder = join(tempDir, 'output')
+
+    const results = await generate({
+      origin: {
+        type: 'sql',
+        path: sqlFile,
+        dialect: 'mysql'
+      },
+      destinations: [
+        {
+          type: 'zod',
+          folder: outputFolder,
+          version: 4
+        }
+      ],
+      includeViews: true,
+      magicComments: true,
+      silent: true
+    })
+
+    const zodOutput = results[join(outputFolder, 'user_view.zod.ts')]
+    expect(zodOutput).toBeDefined()
+    expect(zodOutput).toContain('export const user_view_view = z.object({')
+    // user_id should use the inline @zod comment override
+    expect(zodOutput).toContain('user_id: z.number().positive()')
+    // user_email should use default type
+    expect(zodOutput).toContain('user_email: z.string()')
+
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
 })
