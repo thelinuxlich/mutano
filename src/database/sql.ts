@@ -174,6 +174,7 @@ function parseViewColumns(
       let foundType = false
 
       // First try: direct table lookup by alias (e.g., 'ud' -> table definition)
+      let sourceColumnComment = ''
       if (sourceTable && sourceCol) {
         const table = tableDefinitions.get(sourceTable)
         if (table) {
@@ -181,6 +182,7 @@ function parseViewColumns(
           if (col) {
             type = col.type
             nullable = col.nullable
+            sourceColumnComment = col.comment
             foundType = true
           }
         }
@@ -198,6 +200,7 @@ function parseViewColumns(
                 if (col) {
                   type = col.type
                   nullable = col.nullable
+                  sourceColumnComment = col.comment
                   foundType = true
                   break
                 }
@@ -208,33 +211,36 @@ function parseViewColumns(
         }
       }
 
-      // Try to infer Kysely brand from column name for nanoid columns
-      let comment = ''
-      
-      // Special case for rise_account columns
-      if (name === 'user_rise_account') {
-        comment = '@kysely(UserRiseAccount)'
-      } else {
-        const nanoidMatch = name.match(/^(\w+)_nanoid$/)
-        if (nanoidMatch) {
-          const prefix = nanoidMatch[1]
-          // Map common prefixes to brand names
-          const brandMap: Record<string, string> = {
-            'user': 'UserNanoid',
-            'company': 'CompanyNanoid',
-            'team': 'TeamNanoid',
-            'document': 'DocumentNanoid',
-            'template': 'TemplateNanoid',
-            'entity': 'EntityNanoid',
-            'payment': 'PaymentNanoid',
-            'transaction': 'TransactionNanoid'
-          }
-          const brand = brandMap[prefix]
-          if (brand) {
-            comment = `@kysely(${brand})`
+      // Third try: look for a table with the exact name matching the prefix (e.g., 'team_' -> 'teams')
+      if (!foundType && sourceCol) {
+        for (const prefix of Object.keys(prefixToTable)) {
+          if (name.startsWith(prefix)) {
+            // Try the singular and plural forms
+            const singular = prefix.slice(0, -1) // Remove trailing underscore and 's'
+            const potentialTableNames = [
+              prefix.slice(0, -1), // e.g., 'team'
+              prefix.slice(0, -1) + 's', // e.g., 'teams'
+            ]
+            for (const tableName of potentialTableNames) {
+              const table = tableDefinitions.get(tableName)
+              if (table) {
+                const col = table.columns.find(c => c.name === sourceCol)
+                if (col) {
+                  type = col.type
+                  nullable = col.nullable
+                  sourceColumnComment = col.comment
+                  foundType = true
+                  break
+                }
+              }
+            }
+            if (foundType) break
           }
         }
       }
+
+      // Use the comment inherited from the source table column
+      let comment = sourceColumnComment
 
       columns.push({
         name,

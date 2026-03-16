@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { type Desc, generateViewContent, defaultZodHeader } from '../main.js'
+import { type Desc, generateViewContent, defaultZodHeader, generate } from '../main.js'
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 describe('Views with Magic Comments', () => {
   test('should handle @zod magic comments in view columns', () => {
@@ -445,5 +448,160 @@ describe('Views with Magic Comments', () => {
     })
 
     expect(content).toContain('complex_data: Array<{ id: string; values: Record<string, number> }>;')  // @ts magic comment completely overrides (no | null added)
+  })
+
+  test('should inherit branded type comments from source table columns in SQL views', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-view-comments-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+
+    // SQL with tables that have branded type comments and a view that selects from them
+    const sqlContent = `
+CREATE TABLE \`rise_entities\` (
+    \`nanoid\` varchar(191) NOT NULL,
+    \`riseid\` varchar(191) NOT NULL COMMENT '@kysely(CompanyRiseid | UserRiseid | TeamRiseid) @zod(companyRiseid.or(userRiseid).or(teamRiseid))',
+    \`type\` enum('user','company','team') NOT NULL,
+    PRIMARY KEY (\`nanoid\`)
+);
+
+CREATE TABLE \`users_data\` (
+    \`nanoid\` varchar(191) NOT NULL,
+    \`rise_account\` varchar(191) NOT NULL COMMENT '@kysely(UserRiseAccount) @zod(userRiseAccount)',
+    \`email\` varchar(191) NOT NULL,
+    PRIMARY KEY (\`nanoid\`)
+);
+
+CREATE TABLE \`teams\` (
+    \`nanoid\` varchar(191) NOT NULL,
+    \`company_riseid\` varchar(191) NOT NULL COMMENT '@kysely(CompanyRiseid)',
+    \`team_riseid\` varchar(191) NOT NULL COMMENT '@kysely(TeamRiseid) @zod(teamRiseid)',
+    PRIMARY KEY (\`nanoid\`)
+);
+
+CREATE VIEW \`user_team_relationships_view\` AS
+SELECT
+    re.nanoid AS company_nanoid,
+    re.riseid AS company_riseid,
+    t.nanoid AS team_nanoid,
+    t.team_riseid AS team_riseid,
+    ud.rise_account AS user_rise_account
+FROM rise_entities re
+JOIN teams t ON t.company_riseid = re.riseid
+JOIN users_data ud ON ud.nanoid = re.nanoid;
+`
+
+    writeFileSync(sqlFile, sqlContent)
+
+    const outputFolder = join(tempDir, 'output')
+
+    const results = await generate({
+      origin: {
+        type: 'sql',
+        path: sqlFile,
+        dialect: 'mysql'
+      },
+      destinations: [
+        {
+          type: 'kysely',
+          folder: outputFolder,
+          outFile: join(outputFolder, 'db.ts')
+        },
+        {
+          type: 'zod',
+          folder: outputFolder,
+          version: 4
+        }
+      ],
+      includeViews: true,
+      magicComments: true,
+      silent: true
+    })
+
+    // Check Kysely output for view with inherited branded types
+    const kyselyOutput = results[join(outputFolder, 'db.ts')]
+    expect(kyselyOutput).toBeDefined()
+    expect(kyselyOutput).toContain('export interface UserTeamRelationshipsViewView {')
+    // These should have the branded types from the source table comments
+    expect(kyselyOutput).toContain('company_riseid: CompanyRiseid | UserRiseid | TeamRiseid;')
+    expect(kyselyOutput).toContain('team_riseid: TeamRiseid;')
+    // nanoid columns without comments in source tables should be plain string
+    expect(kyselyOutput).toContain('company_nanoid: string;')
+    expect(kyselyOutput).toContain('team_nanoid: string;')
+    expect(kyselyOutput).toContain('user_rise_account: UserRiseAccount;')
+
+    // Check Zod output for view with inherited branded types
+    const zodOutput = results[join(outputFolder, 'user_team_relationships_view.zod.ts')]
+    expect(zodOutput).toBeDefined()
+    expect(zodOutput).toContain('export const user_team_relationships_view_view = z.object({')
+    // These should have the branded types from the source table comments
+    expect(zodOutput).toContain('company_riseid: companyRiseid.or(userRiseid).or(teamRiseid)')
+    expect(zodOutput).toContain('team_riseid: teamRiseid')
+    expect(zodOutput).toContain('company_nanoid: z.string()')
+    expect(zodOutput).toContain('team_nanoid: z.string()')
+    expect(zodOutput).toContain('user_rise_account: userRiseAccount')
+
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
+  })
+
+  test('should inherit comments from source tables via column prefix mapping', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'mutano-view-prefix-test-'))
+    const sqlFile = join(tempDir, 'schema.sql')
+
+    // SQL with tables that have branded type comments
+    // The view uses column aliases with prefixes that map to source tables
+    const sqlContent = `
+CREATE TABLE \`rise_entities\` (
+    \`nanoid\` varchar(191) NOT NULL,
+    \`riseid\` varchar(191) NOT NULL COMMENT '@kysely(CompanyRiseid)',
+    PRIMARY KEY (\`nanoid\`)
+);
+
+CREATE TABLE \`users_data\` (
+    \`nanoid\` varchar(191) NOT NULL,
+    \`riseid\` varchar(191) NOT NULL COMMENT '@kysely(UserRiseid)',
+    PRIMARY KEY (\`nanoid\`)
+);
+
+CREATE VIEW \`test_view\` AS
+SELECT
+    re.riseid AS company_riseid,
+    ud.riseid AS user_riseid
+FROM rise_entities re
+JOIN users_data ud ON ud.nanoid = re.nanoid;
+`
+
+    writeFileSync(sqlFile, sqlContent)
+
+    const outputFolder = join(tempDir, 'output')
+
+    const results = await generate({
+      origin: {
+        type: 'sql',
+        path: sqlFile,
+        dialect: 'mysql'
+      },
+      destinations: [
+        {
+          type: 'kysely',
+          folder: outputFolder,
+          outFile: join(outputFolder, 'db.ts')
+        }
+      ],
+      includeViews: true,
+      magicComments: true,
+      silent: true
+    })
+
+    // Check Kysely output - comments should be inherited from source tables
+    const kyselyOutput = results[join(outputFolder, 'db.ts')]
+    expect(kyselyOutput).toBeDefined()
+    expect(kyselyOutput).toContain('export interface TestViewView {')
+    // The company_riseid column should inherit the comment from rise_entities.riseid
+    expect(kyselyOutput).toContain('company_riseid: CompanyRiseid;')
+    // The user_riseid column should inherit the comment from users_data.riseid
+    expect(kyselyOutput).toContain('user_riseid: UserRiseid;')
+
+    // Cleanup
+    rmSync(tempDir, { recursive: true })
   })
 })
