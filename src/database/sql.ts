@@ -7,18 +7,18 @@ import { readFileSync } from 'node:fs'
 import type { Config, Desc } from '../types/index.js'
 
 interface ParsedTable {
-  name: string
-  isView: boolean
   columns: ParsedColumn[]
+  isView: boolean
+  name: string
 }
 
 interface ParsedColumn {
-  name: string
-  type: string
-  nullable: boolean
+  comment: string
   defaultValue: string | null
   extra: string
-  comment: string
+  name: string
+  nullable: boolean
+  type: string
 }
 
 /**
@@ -31,19 +31,20 @@ export function extractSqlEntities(config: Config): {
 } {
   const sqlPath = (config.origin as { type: 'sql'; path: string }).path
   const sqlContent = readFileSync(sqlPath, 'utf-8')
-  
+
   const tables: string[] = []
   const views: string[] = []
   const tableDefinitions = new Map<string, ParsedTable>()
 
   // Find all CREATE TABLE statements by looking for the pattern and matching parentheses
-  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(/gi
-  
+  const tableRegex =
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(/gi
+
   let match
   while ((match = tableRegex.exec(sqlContent)) !== null) {
     const tableName = match[1]
     const startIdx = match.index + match[0].length - 1 // Position of opening paren
-    
+
     // Find the matching closing parenthesis for the CREATE TABLE
     let parenDepth = 1
     let endIdx = startIdx + 1
@@ -52,17 +53,30 @@ export function extractSqlEntities(config: Config): {
       if (sqlContent[endIdx] === ')') parenDepth--
       endIdx++
     }
-    
+
     if (parenDepth === 0) {
+      // Check for @@ignore in table comment after the closing paren
+      // MySQL table comments look like: ) ENGINE = InnoDB ... COMMENT = '@@ignore';
+      // Limit search to text before the next semicolon to avoid matching comments from other tables
+      const restOfContent = sqlContent.substring(endIdx)
+      const semicolonIdx = restOfContent.indexOf(';')
+      const afterParen =
+        semicolonIdx >= 0
+          ? restOfContent.substring(0, semicolonIdx)
+          : restOfContent.substring(0, 500)
+      if (afterParen.match(/COMMENT\s*=\s*'[^']*@@ignore[^']*'/i)) {
+        continue
+      }
+
       const columnSection = sqlContent.substring(startIdx + 1, endIdx - 1)
       const columns = parseColumns(columnSection)
-      
+
       if (columns.length > 0) {
         tables.push(tableName)
         tableDefinitions.set(tableName, {
           name: tableName,
           isView: false,
-          columns
+          columns,
         })
       }
     }
@@ -70,21 +84,25 @@ export function extractSqlEntities(config: Config): {
 
   // Parse CREATE VIEW statements
   const viewMatches = sqlContent.matchAll(
-    /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+[`"]?(\w+)[`"]?/gi
+    /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+[`"]?(\w+)[`"]?/gi,
   )
 
   for (const match of viewMatches) {
     const viewName = match[1]
     views.push(viewName)
-    
+
     // Parse view columns from the SELECT statement
-    const viewColumns = parseViewColumns(sqlContent, match.index + match[0].length, tableDefinitions)
-    
+    const viewColumns = parseViewColumns(
+      sqlContent,
+      match.index + match[0].length,
+      tableDefinitions,
+    )
+
     if (viewColumns.length > 0) {
       tableDefinitions.set(viewName, {
         name: viewName,
         isView: true,
-        columns: viewColumns
+        columns: viewColumns,
       })
     }
   }
@@ -95,7 +113,7 @@ export function extractSqlEntities(config: Config): {
 /**
  * Parse column definitions from CREATE VIEW statement
  * Extracts column aliases from the SELECT clause and attempts to infer types from source tables
- * 
+ *
  * For views with table aliases (like `ud` for `users_data`), this function attempts to
  * match column aliases (like `user_email`) to their source tables based on naming conventions
  * and the column name prefixes.
@@ -103,7 +121,7 @@ export function extractSqlEntities(config: Config): {
 function parseViewColumns(
   sqlContent: string,
   startPos: number,
-  tableDefinitions: Map<string, ParsedTable>
+  tableDefinitions: Map<string, ParsedTable>,
 ): ParsedColumn[] {
   const columns: ParsedColumn[] = []
 
@@ -121,7 +139,9 @@ function parseViewColumns(
   // Find the end of the SELECT clause (look for FROM, WHERE, GROUP BY, HAVING, LIMIT, etc.)
   // Use a regex that matches FROM at the start of a line or after whitespace
   const fromMatch = selectContent.match(/\sFROM\s/i)
-  const selectClause = fromMatch ? selectContent.substring(0, fromMatch.index) : selectContent
+  const selectClause = fromMatch
+    ? selectContent.substring(0, fromMatch.index)
+    : selectContent
 
   // Parse column expressions - split by commas not inside parentheses
   const columnExprs: string[] = []
@@ -149,11 +169,11 @@ function parseViewColumns(
   // Common table alias mappings based on naming conventions
   // Maps column prefix patterns to likely source table names
   const prefixToTable: Record<string, string[]> = {
-    'user_': ['users_data', 'ud'],
-    'company_': ['rise_entities', 'company'],
-    'team_': ['rise_entities', 'team'],
-    'user_relationship_': ['rise_entities', 'user_rel'],
-    'user_entity_': ['rise_entities', 'user_entity']
+    user_: ['users_data', 'ud'],
+    company_: ['rise_entities', 'company'],
+    team_: ['rise_entities', 'team'],
+    user_relationship_: ['rise_entities', 'user_rel'],
+    user_entity_: ['rise_entities', 'user_entity'],
   }
 
   // Extract column name from each expression
@@ -200,7 +220,9 @@ function parseViewColumns(
       // Try to infer type from source table reference
       // Remove inline comment before matching
       const exprWithoutComment = expr.replace(/--.*$/, '')
-      const sourceRefMatch = exprWithoutComment.match(/^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i)
+      const sourceRefMatch = exprWithoutComment.match(
+        /^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i,
+      )
       const sourceTable = sourceRefMatch?.[1]
       const sourceCol = sourceRefMatch?.[2]
 
@@ -213,7 +235,7 @@ function parseViewColumns(
       if (sourceTable && sourceCol) {
         const table = tableDefinitions.get(sourceTable)
         if (table) {
-          const col = table.columns.find(c => c.name === sourceCol)
+          const col = table.columns.find((c) => c.name === sourceCol)
           if (col) {
             type = col.type
             nullable = col.nullable
@@ -231,7 +253,7 @@ function parseViewColumns(
             for (const tableName of tableNames) {
               const table = tableDefinitions.get(tableName)
               if (table) {
-                const col = table.columns.find(c => c.name === sourceCol)
+                const col = table.columns.find((c) => c.name === sourceCol)
                 if (col) {
                   type = col.type
                   nullable = col.nullable
@@ -259,7 +281,7 @@ function parseViewColumns(
             for (const tableName of potentialTableNames) {
               const table = tableDefinitions.get(tableName)
               if (table) {
-                const col = table.columns.find(c => c.name === sourceCol)
+                const col = table.columns.find((c) => c.name === sourceCol)
                 if (col) {
                   type = col.type
                   nullable = col.nullable
@@ -287,7 +309,7 @@ function parseViewColumns(
         nullable,
         defaultValue: null,
         extra: '',
-        comment
+        comment,
       })
     } else {
       // No alias - use the column name directly (remove table prefixes)
@@ -299,7 +321,7 @@ function parseViewColumns(
           nullable: true,
           defaultValue: null,
           extra: '',
-          comment: ''
+          comment: '',
         })
       }
     }
@@ -313,60 +335,66 @@ function parseViewColumns(
  */
 function parseColumns(columnSection: string): ParsedColumn[] {
   const columns: ParsedColumn[] = []
-  
+
   // Process line by line, tracking multi-line column definitions
   const lines = columnSection.split('\n')
   const columnDefs: string[] = []
   let current = ''
   let parenDepth = 0
-  
+
   for (const line of lines) {
     const trimmedLine = line.trim()
     if (!trimmedLine || trimmedLine.startsWith('--')) continue
-    
+
     // Track parentheses depth for enums
     for (const char of trimmedLine) {
       if (char === '(') parenDepth++
       if (char === ')') parenDepth--
     }
-    
+
     current += ' ' + trimmedLine
-    
+
     // If at depth 0 and line ends with comma, or is a complete definition
     if (parenDepth === 0) {
       if (trimmedLine.endsWith(',')) {
         columnDefs.push(current.trim().slice(0, -1)) // Remove trailing comma
         current = ''
-      } else if (!trimmedLine.includes('(') && 
-                 (trimmedLine.match(/,?\s*$/) || 
-                  trimmedLine.match(/COMMENT\s+'[^']*'\s*,?$/i))) {
+      } else if (
+        !trimmedLine.includes('(') &&
+        (trimmedLine.match(/,?\s*$/) ||
+          trimmedLine.match(/COMMENT\s+'[^']*'\s*,?$/i))
+      ) {
         columnDefs.push(current.trim().replace(/,$/, ''))
         current = ''
       }
     }
   }
-  
+
   // Add any remaining
   if (current.trim()) {
     columnDefs.push(current.trim().replace(/,$/, ''))
   }
-  
+
   for (const colDef of columnDefs) {
     const trimmed = colDef.trim()
     if (!trimmed) continue
-    
+
     // Skip constraints
-    if (trimmed.match(/^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i)) {
+    if (
+      trimmed.match(
+        /^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i,
+      )
+    ) {
       continue
     }
-    
+
     // Parse column: `name` type [constraints...]
     const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/is)
     if (!colMatch) continue
-    
+
     const name = colMatch[1]
     let rest = colMatch[2].trim()
-    
+
     // Extract type with special handling for multi-line enums
     let type = ''
     if (rest.match(/^(enum|set)\s*\(/i)) {
@@ -388,17 +416,18 @@ function parseColumns(columnSection: string): ParsedColumn[] {
         rest = rest.substring(typeMatch[0].length).trim()
       }
     }
-    
+
     if (!type) continue
-    
+
     // Parse constraints
     const nullable = !rest.match(/NOT\s+NULL/i)
-    
+
     // Extract EXTRA first (before processing DEFAULT)
     const extras: string[] = []
     if (rest.match(/AUTO_INCREMENT/i)) extras.push('auto_increment')
-    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push('on update CURRENT_TIMESTAMP')
-    
+    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i))
+      extras.push('on update CURRENT_TIMESTAMP')
+
     // Extract DEFAULT - handle quoted strings with spaces
     let defaultValue: string | null = null
     // Match DEFAULT followed by either a quoted string or a non-whitespace value
@@ -418,7 +447,7 @@ function parseColumns(columnSection: string): ParsedColumn[] {
         extras.push('DEFAULT_GENERATED')
       }
     }
-    
+
     // Extract COMMENT
     let comment = ''
     const commentMatch = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i)
@@ -426,13 +455,21 @@ function parseColumns(columnSection: string): ParsedColumn[] {
       comment = commentMatch[1].replace(/\\'/g, "'")
     }
 
+    // Skip columns with @ignore comment
+    if (comment.match(/@ignore/)) {
+      continue
+    }
+
     // Validate: Magic comments on enum fields can cause issues with sqldef
     // when generating ALTER TABLE statements due to quote escaping problems
-    if (type.match(/^(enum|set)\s*\(/i) && comment.match(/@(kysely|ts|zod)\s*\(/)) {
+    if (
+      type.match(/^(enum|set)\s*\(/i) &&
+      comment.match(/@(kysely|ts|zod)\s*\(/)
+    ) {
       throw new Error(
         `Magic comments are not supported on enum/set columns. ` +
-        `Column "${name}" has type "${type}" with comment "${comment}". ` +
-        `Remove the magic comment - enum types are automatically generated by mutano.`
+          `Column "${name}" has type "${type}" with comment "${comment}". ` +
+          `Remove the magic comment - enum types are automatically generated by mutano.`,
       )
     }
 
@@ -442,10 +479,10 @@ function parseColumns(columnSection: string): ParsedColumn[] {
       nullable,
       defaultValue,
       extra: extras.join(' '),
-      comment
+      comment,
     })
   }
-  
+
   return columns
 }
 
@@ -455,21 +492,21 @@ function parseColumns(columnSection: string): ParsedColumn[] {
 export function extractSqlColumnDescriptions(
   config: Config,
   tableName: string,
-  tableDefinitions: Map<string, ParsedTable>
+  tableDefinitions: Map<string, ParsedTable>,
 ): Desc[] {
   const table = tableDefinitions.get(tableName)
   if (!table) return []
-  
-  return table.columns.map(col => {
+
+  return table.columns.map((col) => {
     // Parse enum options - handle multi-line enums by using dotAll flag
     const enumMatch = col.type.match(/enum\s*\(([\s\S]+)\)/i)
-    const enumOptions = enumMatch 
-      ? enumMatch[1].match(/'([^']+)'/g)?.map(s => s.slice(1, -1))
+    const enumOptions = enumMatch
+      ? enumMatch[1].match(/'([^']+)'/g)?.map((s) => s.slice(1, -1))
       : undefined
-    
+
     // Extract base data type
     const dataType = col.type.split('(')[0].toLowerCase()
-    
+
     return {
       Field: col.name,
       Type: col.type,
@@ -478,7 +515,7 @@ export function extractSqlColumnDescriptions(
       Default: col.defaultValue,
       Extra: col.extra,
       Comment: col.comment,
-      EnumOptions: enumOptions
+      EnumOptions: enumOptions,
     }
   })
 }

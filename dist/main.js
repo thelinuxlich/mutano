@@ -1128,6 +1128,12 @@ function extractSqlEntities(config) {
       endIdx++;
     }
     if (parenDepth === 0) {
+      const restOfContent = sqlContent.substring(endIdx);
+      const semicolonIdx = restOfContent.indexOf(";");
+      const afterParen = semicolonIdx >= 0 ? restOfContent.substring(0, semicolonIdx) : restOfContent.substring(0, 500);
+      if (afterParen.match(/COMMENT\s*=\s*'[^']*@@ignore[^']*'/i)) {
+        continue;
+      }
       const columnSection = sqlContent.substring(startIdx + 1, endIdx - 1);
       const columns = parseColumns(columnSection);
       if (columns.length > 0) {
@@ -1146,7 +1152,11 @@ function extractSqlEntities(config) {
   for (const match2 of viewMatches) {
     const viewName = match2[1];
     views.push(viewName);
-    const viewColumns = parseViewColumns(sqlContent, match2.index + match2[0].length, tableDefinitions);
+    const viewColumns = parseViewColumns(
+      sqlContent,
+      match2.index + match2[0].length,
+      tableDefinitions
+    );
     if (viewColumns.length > 0) {
       tableDefinitions.set(viewName, {
         name: viewName,
@@ -1184,11 +1194,11 @@ function parseViewColumns(sqlContent, startPos, tableDefinitions) {
     columnExprs.push(current.trim());
   }
   const prefixToTable = {
-    "user_": ["users_data", "ud"],
-    "company_": ["rise_entities", "company"],
-    "team_": ["rise_entities", "team"],
-    "user_relationship_": ["rise_entities", "user_rel"],
-    "user_entity_": ["rise_entities", "user_entity"]
+    user_: ["users_data", "ud"],
+    company_: ["rise_entities", "company"],
+    team_: ["rise_entities", "team"],
+    user_relationship_: ["rise_entities", "user_rel"],
+    user_entity_: ["rise_entities", "user_entity"]
   };
   for (let i = 0; i < columnExprs.length; i++) {
     let expr = columnExprs[i];
@@ -1216,7 +1226,9 @@ function parseViewColumns(sqlContent, startPos, tableDefinitions) {
     if (aliasMatch) {
       const name = aliasMatch[1];
       const exprWithoutComment = expr.replace(/--.*$/, "");
-      const sourceRefMatch = exprWithoutComment.match(/^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i);
+      const sourceRefMatch = exprWithoutComment.match(
+        /^(?:[`"]?([\w_]+)[`"]?\.)?[`"]?([\w_]+)[`"]?\s+AS/i
+      );
       const sourceTable = sourceRefMatch?.[1];
       const sourceCol = sourceRefMatch?.[2];
       let type = "varchar(191)";
@@ -1340,7 +1352,9 @@ function parseColumns(columnSection) {
   for (const colDef of columnDefs) {
     const trimmed = colDef.trim();
     if (!trimmed) continue;
-    if (trimmed.match(/^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i)) {
+    if (trimmed.match(
+      /^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i
+    )) {
       continue;
     }
     const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/is);
@@ -1369,7 +1383,8 @@ function parseColumns(columnSection) {
     const nullable = !rest.match(/NOT\s+NULL/i);
     const extras = [];
     if (rest.match(/AUTO_INCREMENT/i)) extras.push("auto_increment");
-    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i)) extras.push("on update CURRENT_TIMESTAMP");
+    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i))
+      extras.push("on update CURRENT_TIMESTAMP");
     let defaultValue = null;
     const defaultMatch = rest.match(/DEFAULT\s+('(?:[^'\\]|\\.)*'|\S+)/i);
     if (defaultMatch) {
@@ -1388,6 +1403,9 @@ function parseColumns(columnSection) {
     const commentMatch = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i);
     if (commentMatch) {
       comment = commentMatch[1].replace(/\\'/g, "'");
+    }
+    if (comment.match(/@ignore/)) {
+      continue;
     }
     if (type.match(/^(enum|set)\s*\(/i) && comment.match(/@(kysely|ts|zod)\s*\(/)) {
       throw new Error(
