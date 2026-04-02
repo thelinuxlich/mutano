@@ -375,6 +375,51 @@ Override default types globally. Define destination-specific overrides for each 
 }
 ```
 
+**Overriding `tinyint(1)` to a Zod boolean coercion (with preserved defaults):**
+
+When using SQL DDL files with MySQL `tinyint(1)` columns, you can override the generated type while preserving default values:
+
+```sql
+CREATE TABLE settings (
+  id int NOT NULL AUTO_INCREMENT,
+  is_active tinyint(1) NOT NULL DEFAULT '1',
+  is_public tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (id)
+);
+```
+
+```typescript
+await generate({
+  origin: {
+    type: 'sql',
+    path: './schema.sql',
+    dialect: 'mysql'
+  },
+  destinations: [{
+    type: 'zod',
+    folder: './generated',
+    useBooleanType: true
+  }],
+  overrideTypes: {
+    zod: {
+      'tinyint(1)': 'z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean())'
+    }
+  }
+})
+```
+
+This generates correct defaults from the SQL `DEFAULT` clause:
+```typescript
+// is_active has DEFAULT '1' -> .default(true)
+// is_public has DEFAULT '0' -> .default(false)
+export const settings = z.object({
+  is_active: z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean()).default(true),
+  is_public: z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean()).default(false),
+})
+```
+
+> **Note:** `overrideTypes` preserves nullability, optionality, and default values from the schema. Only the base type is replaced. For boolean columns, mutano correctly maps MySQL `DEFAULT '1'` to `true` and `DEFAULT '0'` to `false`.
+
 **Common Overrides:**
 - **MySQL**: `json`, `text`, `decimal`, `enum`
 - **PostgreSQL**: `jsonb`, `uuid`, `text`, `numeric`

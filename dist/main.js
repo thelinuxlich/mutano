@@ -278,10 +278,39 @@ function getType(op, desc, config, destination, entityName) {
   const overrideType = config.overrideTypes?.[destKey]?.[Type];
   if (overrideType) {
     const shouldBeNullable = isNull || ["insertable", "updateable"].includes(op) && (hasDefaultValue || isGenerated) || op === "updateable" && !isNull && !hasDefaultValue;
+    const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
     if (isZodDestination) {
       const nullishOption = destination.nullish;
       const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
-      return shouldBeNullable ? `${overrideType}.${nullableMethod}()` : overrideType;
+      if ((op === "table" || op === "insertable" || op === "updateable") && hasDefaultValue && Default !== null && !isGenerated) {
+        let defaultValueFormatted = Default;
+        if (typeMappings.stringTypes.includes(dataType) || typeMappings.dateTypes.includes(dataType)) {
+          defaultValueFormatted = `'${Default}'`;
+        } else if (typeMappings.booleanTypes.includes(dataType)) {
+          const normalizedDefault = Default.toLowerCase();
+          defaultValueFormatted = normalizedDefault === "true" || normalizedDefault === "1" ? "true" : "false";
+        } else if (typeMappings.numberTypes.includes(dataType)) {
+          defaultValueFormatted = Default;
+        } else {
+          defaultValueFormatted = `'${Default}'`;
+        }
+        if (shouldBeNullable && shouldBeOptional) {
+          return `${overrideType}.${nullableMethod}().default(${defaultValueFormatted})`;
+        } else if (shouldBeNullable) {
+          return `${overrideType}.${nullableMethod}().default(${defaultValueFormatted})`;
+        } else if (shouldBeOptional) {
+          return `${overrideType}.optional().default(${defaultValueFormatted})`;
+        } else {
+          return `${overrideType}.default(${defaultValueFormatted})`;
+        }
+      }
+      if (shouldBeNullable) {
+        return `${overrideType}.${nullableMethod}()`;
+      } else if (shouldBeOptional) {
+        return `${overrideType}.optional()`;
+      } else {
+        return overrideType;
+      }
     } else {
       return shouldBeNullable ? `${overrideType} | null` : overrideType;
     }
@@ -353,7 +382,14 @@ function getType(op, desc, config, destination, entityName) {
       }
     }
   }
-  return generateStandardType(op, desc, config, destination, typeMappings, dataType);
+  return generateStandardType(
+    op,
+    desc,
+    config,
+    destination,
+    typeMappings,
+    dataType
+  );
 }
 function generateStandardType(op, desc, config, destination, typeMappings, dataType) {
   const { Default, Extra, Null, Type } = desc;
@@ -391,7 +427,7 @@ function generateStandardType(op, desc, config, destination, typeMappings, dataT
       baseType = "z.string()";
       if (op !== "selectable") {
         baseType += ".trim()";
-        if (!hasDefaultValue && !shouldBeNullable) {
+        if (!(hasDefaultValue || shouldBeNullable)) {
           baseType += ".min(1)";
         }
       }
@@ -423,7 +459,8 @@ function generateStandardType(op, desc, config, destination, typeMappings, dataT
       const requiredString = destination.requiredString;
       baseType = "z.string()";
       if (useTrim && op !== "selectable") baseType += ".trim()";
-      if (requiredString && !shouldBeNullable && op !== "selectable" && !hasDefaultValue) baseType += ".min(1)";
+      if (requiredString && !shouldBeNullable && op !== "selectable" && !hasDefaultValue)
+        baseType += ".min(1)";
     } else {
       baseType = "string";
     }
@@ -438,7 +475,8 @@ function generateStandardType(op, desc, config, destination, typeMappings, dataT
       if (typeMappings.stringTypes.includes(dataType) || typeMappings.dateTypes.includes(dataType)) {
         defaultValueFormatted = `'${Default}'`;
       } else if (typeMappings.booleanTypes.includes(dataType)) {
-        defaultValueFormatted = Default.toLowerCase() === "true" ? "true" : "false";
+        const normalizedDefault = Default.toLowerCase();
+        defaultValueFormatted = normalizedDefault === "true" || normalizedDefault === "1" ? "true" : "false";
       } else if (typeMappings.numberTypes.includes(dataType)) {
         defaultValueFormatted = Default;
       } else {

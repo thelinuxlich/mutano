@@ -3,15 +3,11 @@
  */
 
 import type { Config, Desc, Destination } from '../types/index.js'
-import { 
-  getTypeMappings, 
-  isJsonType, 
-  enumRegex 
-} from '../types/mappings.js'
-import { 
-  extractZodExpression, 
-  extractTSExpression, 
-  extractKyselyExpression 
+import { enumRegex, getTypeMappings, isJsonType } from '../types/mappings.js'
+import {
+  extractKyselyExpression,
+  extractTSExpression,
+  extractZodExpression,
 } from '../utils/magic-comments.js'
 
 export type OperationType = 'table' | 'insertable' | 'updateable' | 'selectable'
@@ -24,33 +20,43 @@ export function getType(
   desc: Desc,
   config: Config,
   destination: Destination,
-  entityName?: string
+  entityName?: string,
 ): string {
   const { Default, Extra, Null, Type, DataType, Comment, EnumOptions } = desc
   const schemaType = config.origin.type
   // For Prisma, preserve case; for others, convert to lowercase
   const type = schemaType === 'prisma' ? Type : Type.toLowerCase()
   // Use DataType (normalized type from DB) for type category matching, fallback to Type
-  let dataType = DataType ? (schemaType === 'prisma' ? DataType : DataType.toLowerCase()) : type
-  
+  let dataType = DataType
+    ? schemaType === 'prisma'
+      ? DataType
+      : DataType.toLowerCase()
+    : type
+
   // Handle MySQL tinyint(1) as boolean when tinyIntAsBoolean option is enabled (default true)
-  const isMySQL = schemaType === 'mysql' || (schemaType === 'sql' && (config.origin as any).dialect === 'mysql')
-  const tinyIntAsBoolean = isMySQL && (config.origin as any).tinyIntAsBoolean !== false
-  const isTinyInt1 = isMySQL && dataType === 'tinyint' && Type.toLowerCase().includes('(1)')
+  const isMySQL =
+    schemaType === 'mysql' ||
+    (schemaType === 'sql' && (config.origin as any).dialect === 'mysql')
+  const tinyIntAsBoolean =
+    isMySQL && (config.origin as any).tinyIntAsBoolean !== false
+  const isTinyInt1 =
+    isMySQL && dataType === 'tinyint' && Type.toLowerCase().includes('(1)')
   if (tinyIntAsBoolean && isTinyInt1) {
     dataType = 'boolean'
   }
-  
+
   const isNull = Null === 'YES'
   const hasDefaultValue = Default !== null
-  const isGenerated = Extra.toLowerCase().includes('auto_increment') ||
-                     Extra.toLowerCase().includes('default_generated')
+  const isGenerated =
+    Extra.toLowerCase().includes('auto_increment') ||
+    Extra.toLowerCase().includes('default_generated')
   const isTsDestination = destination.type === 'ts'
   const isKyselyDestination = destination.type === 'kysely'
   const isZodDestination = destination.type === 'zod'
 
   // Get dialect for SQL file origins
-  const dialect = schemaType === 'sql' ? (config.origin as any).dialect : undefined
+  const dialect =
+    schemaType === 'sql' ? (config.origin as any).dialect : undefined
   const typeMappings = getTypeMappings(schemaType, dialect)
 
   const destKey = isZodDestination ? 'zod' : isTsDestination ? 'ts' : 'kysely'
@@ -58,7 +64,11 @@ export function getType(
   // Handle column overrides from config (highest priority)
   if (entityName && config.overrideColumns) {
     const destOverrides = config.overrideColumns[destKey]
-    if (destOverrides && destOverrides[entityName] && destOverrides[entityName][desc.Field]) {
+    if (
+      destOverrides &&
+      destOverrides[entityName] &&
+      destOverrides[entityName][desc.Field]
+    ) {
       const columnOverride = destOverrides[entityName][desc.Field]
       const shouldBeNullable =
         isNull ||
@@ -68,8 +78,11 @@ export function getType(
 
       if (isZodDestination) {
         const nullishOption = (destination as any).nullish
-        const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
-        return shouldBeNullable ? `${columnOverride}.${nullableMethod}()` : columnOverride
+        const nullableMethod =
+          nullishOption && op !== 'selectable' ? 'nullish' : 'nullable'
+        return shouldBeNullable
+          ? `${columnOverride}.${nullableMethod}()`
+          : columnOverride
       } else {
         return shouldBeNullable ? `${columnOverride} | null` : columnOverride
       }
@@ -113,6 +126,7 @@ export function getType(
   }
 
   // Handle override types from config (third priority)
+  // Uses the override type as baseType but still applies nullability, optionality, and defaults
   const overrideType = config.overrideTypes?.[destKey]?.[Type]
 
   if (overrideType) {
@@ -122,11 +136,58 @@ export function getType(
         (hasDefaultValue || isGenerated)) ||
       (op === 'updateable' && !isNull && !hasDefaultValue)
 
+    const shouldBeOptional =
+      (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
+      op === 'updateable'
+
     if (isZodDestination) {
       const nullishOption = (destination as any).nullish
-      // For selectable schemas, always use .nullable() since DB fields are never undefined
-      const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
-      return shouldBeNullable ? `${overrideType}.${nullableMethod}()` : overrideType
+      const nullableMethod =
+        nullishOption && op !== 'selectable' ? 'nullish' : 'nullable'
+
+      // Apply defaults for non-selectable schemas
+      if (
+        (op === 'table' || op === 'insertable' || op === 'updateable') &&
+        hasDefaultValue &&
+        Default !== null &&
+        !isGenerated
+      ) {
+        let defaultValueFormatted = Default
+        if (
+          typeMappings.stringTypes.includes(dataType) ||
+          typeMappings.dateTypes.includes(dataType)
+        ) {
+          defaultValueFormatted = `'${Default}'`
+        } else if (typeMappings.booleanTypes.includes(dataType)) {
+          const normalizedDefault = Default.toLowerCase()
+          defaultValueFormatted =
+            normalizedDefault === 'true' || normalizedDefault === '1'
+              ? 'true'
+              : 'false'
+        } else if (typeMappings.numberTypes.includes(dataType)) {
+          defaultValueFormatted = Default
+        } else {
+          defaultValueFormatted = `'${Default}'`
+        }
+
+        if (shouldBeNullable && shouldBeOptional) {
+          return `${overrideType}.${nullableMethod}().default(${defaultValueFormatted})`
+        } else if (shouldBeNullable) {
+          return `${overrideType}.${nullableMethod}().default(${defaultValueFormatted})`
+        } else if (shouldBeOptional) {
+          return `${overrideType}.optional().default(${defaultValueFormatted})`
+        } else {
+          return `${overrideType}.default(${defaultValueFormatted})`
+        }
+      }
+
+      if (shouldBeNullable) {
+        return `${overrideType}.${nullableMethod}()`
+      } else if (shouldBeOptional) {
+        return `${overrideType}.optional()`
+      } else {
+        return overrideType
+      }
     } else {
       return shouldBeNullable ? `${overrideType} | null` : overrideType
     }
@@ -152,13 +213,19 @@ export function getType(
   const isEnum = enumTypesForSchema.includes(dataType)
 
   // For Prisma, also check if the type exists in enumDeclarations
-  const isPrismaEnum = schemaType === 'prisma' && config.enumDeclarations && config.enumDeclarations[type]
+  const isPrismaEnum =
+    schemaType === 'prisma' &&
+    config.enumDeclarations &&
+    config.enumDeclarations[type]
 
   if (isEnum || isPrismaEnum) {
     let enumValues: string[] = []
 
     // Check if this is a MySQL enum (including SQL files with MySQL dialect)
-    const isMySQLEnum = (schemaType === 'mysql' || (schemaType === 'sql' && dialect === 'mysql')) && dataType === 'enum'
+    const isMySQLEnum =
+      (schemaType === 'mysql' ||
+        (schemaType === 'sql' && dialect === 'mysql')) &&
+      dataType === 'enum'
 
     if (isMySQLEnum) {
       const match = Type.match(enumRegex)
@@ -178,18 +245,24 @@ export function getType(
       // Determine if field should be optional (can be omitted from input)
       const shouldBeOptional =
         (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
-        (op === 'updateable')
+        op === 'updateable'
 
       if (isZodDestination) {
         const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(',')}])`
         const nullishOption = (destination as any).nullish
         // For selectable schemas, always use .nullable() since DB fields are never undefined
-        const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
+        const nullableMethod =
+          nullishOption && op !== 'selectable' ? 'nullish' : 'nullable'
 
         // Handle default values for main, insertable, and updateable schemas (NOT selectable)
         // Note: selectable schemas should NOT have .default() because when selecting from DB,
         // you always get a value (either user-provided or DB default)
-        if ((op === 'table' || op === 'insertable' || op === 'updateable') && hasDefaultValue && Default !== null && !isGenerated) {
+        if (
+          (op === 'table' || op === 'insertable' || op === 'updateable') &&
+          hasDefaultValue &&
+          Default !== null &&
+          !isGenerated
+        ) {
           // Field has an explicit default value (not auto-generated)
           if (shouldBeNullable && shouldBeOptional) {
             // For updateable: nullable and optional with default at the end
@@ -238,7 +311,14 @@ export function getType(
   }
 
   // Handle other types based on type mappings
-  return generateStandardType(op, desc, config, destination, typeMappings, dataType)
+  return generateStandardType(
+    op,
+    desc,
+    config,
+    destination,
+    typeMappings,
+    dataType,
+  )
 }
 
 /**
@@ -250,7 +330,7 @@ function generateStandardType(
   config: Config,
   destination: Destination,
   typeMappings: ReturnType<typeof getTypeMappings>,
-  dataType: string
+  dataType: string,
 ): string {
   const { Default, Extra, Null, Type } = desc
   const schemaType = config.origin.type
@@ -258,8 +338,9 @@ function generateStandardType(
   const type = schemaType === 'prisma' ? Type : Type.toLowerCase()
   const isNull = Null === 'YES'
   const hasDefaultValue = Default !== null
-  const isGenerated = Extra.toLowerCase().includes('auto_increment') ||
-                     Extra.toLowerCase().includes('default_generated')
+  const isGenerated =
+    Extra.toLowerCase().includes('auto_increment') ||
+    Extra.toLowerCase().includes('default_generated')
 
   const isZodDestination = destination.type === 'zod'
   const isKyselyDestination = destination.type === 'kysely'
@@ -270,7 +351,7 @@ function generateStandardType(
   // Determine if field should be optional (can be omitted from input)
   const shouldBeOptional =
     (op === 'insertable' && (hasDefaultValue || isGenerated)) ||
-    (op === 'updateable')
+    op === 'updateable'
 
   let baseType: string
 
@@ -279,7 +360,8 @@ function generateStandardType(
     if (isZodDestination) {
       const useDateType = (destination as any).useDateType
       if (useDateType) {
-        baseType = 'z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())'
+        baseType =
+          'z.union([z.number(), z.string(), z.date()]).pipe(z.coerce.date())'
       } else {
         baseType = 'z.date()'
       }
@@ -303,7 +385,7 @@ function generateStandardType(
       if (op !== 'selectable') {
         baseType += '.trim()'
         // For decimal fields with default values or nullable fields, don't add .min(1) validation
-        if (!hasDefaultValue && !shouldBeNullable) {
+        if (!(hasDefaultValue || shouldBeNullable)) {
           baseType += '.min(1)'
         }
       }
@@ -323,7 +405,8 @@ function generateStandardType(
     if (isZodDestination) {
       const useBooleanType = (destination as any).useBooleanType
       if (useBooleanType) {
-        baseType = 'z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean())'
+        baseType =
+          'z.union([z.number(), z.string(), z.boolean()]).pipe(z.coerce.boolean())'
       } else {
         baseType = 'z.boolean()'
       }
@@ -339,8 +422,13 @@ function generateStandardType(
       // Selectable schemas represent data from DB which is already validated/stored
       if (useTrim && op !== 'selectable') baseType += '.trim()'
       // For string fields with default values, don't add .min(1) validation
-      if (requiredString && !shouldBeNullable && op !== 'selectable' &&
-          !hasDefaultValue) baseType += '.min(1)'
+      if (
+        requiredString &&
+        !shouldBeNullable &&
+        op !== 'selectable' &&
+        !hasDefaultValue
+      )
+        baseType += '.min(1)'
     } else {
       baseType = 'string'
     }
@@ -353,21 +441,34 @@ function generateStandardType(
   if (isZodDestination) {
     const nullishOption = (destination as any).nullish
     // For selectable schemas, always use .nullable() since DB fields are never undefined
-    const nullableMethod = (nullishOption && op !== 'selectable') ? 'nullish' : 'nullable'
+    const nullableMethod =
+      nullishOption && op !== 'selectable' ? 'nullish' : 'nullable'
 
     // Handle default values for main, insertable, and updateable schemas (NOT selectable)
     // Note: selectable schemas should NOT have .default() because when selecting from DB,
     // you always get a value (either user-provided or DB default)
-    if ((op === 'table' || op === 'insertable' || op === 'updateable') && hasDefaultValue && Default !== null && !isGenerated) {
+    if (
+      (op === 'table' || op === 'insertable' || op === 'updateable') &&
+      hasDefaultValue &&
+      Default !== null &&
+      !isGenerated
+    ) {
       // Field has an explicit default value (not auto-generated)
       // For non-enum types, we need to format the default value appropriately
       let defaultValueFormatted = Default
 
       // Handle different types of default values
-      if (typeMappings.stringTypes.includes(dataType) || typeMappings.dateTypes.includes(dataType)) {
+      if (
+        typeMappings.stringTypes.includes(dataType) ||
+        typeMappings.dateTypes.includes(dataType)
+      ) {
         defaultValueFormatted = `'${Default}'`
       } else if (typeMappings.booleanTypes.includes(dataType)) {
-        defaultValueFormatted = Default.toLowerCase() === 'true' ? 'true' : 'false'
+        const normalizedDefault = Default.toLowerCase()
+        defaultValueFormatted =
+          normalizedDefault === 'true' || normalizedDefault === '1'
+            ? 'true'
+            : 'false'
       } else if (typeMappings.numberTypes.includes(dataType)) {
         defaultValueFormatted = Default
       } else {
@@ -390,11 +491,18 @@ function generateStandardType(
 
     // Special handling for date/datetime fields in main and selectable schemas
     const isDateField = typeMappings.dateTypes.includes(dataType)
-    const shouldDateBeOptional = isDateField && (hasDefaultValue || isGenerated) && (op === 'table' || op === 'selectable')
+    const shouldDateBeOptional =
+      isDateField &&
+      (hasDefaultValue || isGenerated) &&
+      (op === 'table' || op === 'selectable')
 
     // Special handling for ID fields with autoincrement/auto-generation in main and selectable schemas
-    const isIdField = typeMappings.numberTypes.includes(dataType) || typeMappings.bigIntTypes.includes(dataType) || typeMappings.stringTypes.includes(dataType)
-    const shouldIdBeOptional = isIdField && isGenerated && (op === 'table' || op === 'selectable')
+    const isIdField =
+      typeMappings.numberTypes.includes(dataType) ||
+      typeMappings.bigIntTypes.includes(dataType) ||
+      typeMappings.stringTypes.includes(dataType)
+    const shouldIdBeOptional =
+      isIdField && isGenerated && (op === 'table' || op === 'selectable')
 
     if (shouldBeNullable && shouldBeOptional) {
       // Field is both nullable and optional
