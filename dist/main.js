@@ -60,7 +60,13 @@ function applyInflection(name, inflection) {
 }
 
 const dateTypes = {
-  mysql: ["date", "datetime", "datetime(3)", "timestamp", "timestamp(3)"],
+  mysql: [
+    "date",
+    "datetime",
+    "datetime(3)",
+    "timestamp",
+    "timestamp(3)"
+  ],
   postgres: [
     "timestamp",
     "timestamp with time zone",
@@ -122,6 +128,7 @@ const numberTypes = {
     "smallint",
     "mediumint",
     "int",
+    "integer",
     "float",
     "double",
     "bit",

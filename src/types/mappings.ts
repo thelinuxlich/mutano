@@ -16,7 +16,13 @@ export const prismaValidTypes = [
 ] as const
 
 export const dateTypes = {
-  mysql: ['date', 'datetime', 'datetime(3)', 'timestamp', 'timestamp(3)'] as string[],
+  mysql: [
+    'date',
+    'datetime',
+    'datetime(3)',
+    'timestamp',
+    'timestamp(3)',
+  ] as string[],
   postgres: [
     'timestamp',
     'timestamp with time zone',
@@ -81,6 +87,7 @@ export const numberTypes = {
     'smallint',
     'mediumint',
     'int',
+    'integer',
     'float',
     'double',
     'bit',
@@ -139,10 +146,16 @@ export const enumRegex = /enum\(([^)]+)\)/
 /**
  * Get the appropriate type mappings for a database type
  */
-export function getTypeMappings(dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma' | 'sql', dialect?: string) {
+export function getTypeMappings(
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma' | 'sql',
+  dialect?: string,
+) {
   // For SQL files, use the dialect to determine mappings (default to mysql)
-  const effectiveType = dbType === 'sql' ? (dialect as 'mysql' | 'postgres' | 'sqlite' || 'mysql') : dbType
-  
+  const effectiveType =
+    dbType === 'sql'
+      ? (dialect as 'mysql' | 'postgres' | 'sqlite') || 'mysql'
+      : dbType
+
   return {
     dateTypes: dateTypes[effectiveType],
     stringTypes: stringTypes[effectiveType],
@@ -164,48 +177,69 @@ export function isJsonType(type: string): boolean {
 /**
  * Check if a type is a date type for a specific database
  */
-export function isDateType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isDateType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return dateTypes[dbType].includes(type)
 }
 
 /**
  * Check if a type is a string type for a specific database
  */
-export function isStringType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isStringType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return stringTypes[dbType].includes(type)
 }
 
 /**
  * Check if a type is a number type for a specific database
  */
-export function isNumberType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isNumberType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return numberTypes[dbType].includes(type)
 }
 
 /**
  * Check if a type is a bigint type for a specific database
  */
-export function isBigIntType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isBigIntType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return bigIntTypes[dbType].includes(type)
 }
 
 /**
  * Check if a type is a decimal type for a specific database
  */
-export function isDecimalType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isDecimalType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return decimalTypes[dbType].includes(type)
 }
 
 /**
  * Check if a type is a boolean type for a specific database
  */
-export function isBooleanType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isBooleanType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return booleanTypes[dbType].includes(type)
 }
 
 /**
  * Check if a type is an enum type for a specific database
  */
-export function isEnumType(type: string, dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma'): boolean {
+export function isEnumType(
+  type: string,
+  dbType: 'mysql' | 'postgres' | 'sqlite' | 'prisma',
+): boolean {
   return enumTypes[dbType].includes(type)
 }
