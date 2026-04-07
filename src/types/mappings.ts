@@ -141,7 +141,7 @@ export const enumTypes = {
   prisma: [] as string[],
 }
 
-export const enumRegex = /enum\(([^)]+)\)/
+export const enumRegex = /enum\(([^)]+)\)/i
 
 /**
  * Get the appropriate type mappings for a database type

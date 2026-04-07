@@ -178,7 +178,7 @@ const enumTypes = {
   sqlite: [],
   prisma: []
 };
-const enumRegex = /enum\(([^)]+)\)/;
+const enumRegex = /enum\(([^)]+)\)/i;
 function getTypeMappings(dbType, dialect) {
   const effectiveType = dbType === "sql" ? dialect || "mysql" : dbType;
   return {
