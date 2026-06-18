@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { ensureDir } from 'fs-extra/esm';
 import pluralize from 'pluralize';
 import knex from 'knex';
-import { readFileSync } from 'node:fs';
+import { statSync, readFileSync, readdirSync } from 'node:fs';
 import { createPrismaSchemaBuilder } from '@mrleebo/prisma-ast';
 
 function filterEntities(entities, included, ignored) {
@@ -975,11 +975,48 @@ async function extractColumnDescriptions(db, config, tableName) {
   }
 }
 
+function toComparableSchemaPath(rootPath, filePath) {
+  return path.relative(rootPath, filePath).split(path.sep).join("/");
+}
+function comparePrismaSchemaFiles(rootPath, a, b) {
+  const relativeA = toComparableSchemaPath(rootPath, a);
+  const relativeB = toComparableSchemaPath(rootPath, b);
+  if (relativeA === "schema.prisma") return -1;
+  if (relativeB === "schema.prisma") return 1;
+  return relativeA.localeCompare(relativeB);
+}
+function collectPrismaSchemaFiles(schemaPath) {
+  const entries = readdirSync(schemaPath, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const entryPath = path.join(schemaPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectPrismaSchemaFiles(entryPath));
+    } else if (entry.isFile() && entry.name.endsWith(".prisma")) {
+      files.push(entryPath);
+    }
+  }
+  return files;
+}
+function loadPrismaSchemaContent(schemaPath) {
+  const stats = statSync(schemaPath);
+  if (stats.isFile()) {
+    return readFileSync(schemaPath, "utf-8");
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`Prisma schema path is not a file or directory: ${schemaPath}`);
+  }
+  const schemaFiles = collectPrismaSchemaFiles(schemaPath).sort((a, b) => comparePrismaSchemaFiles(schemaPath, a, b));
+  if (schemaFiles.length === 0) {
+    throw new Error(`No .prisma files found in directory: ${schemaPath}`);
+  }
+  return schemaFiles.map((filePath) => readFileSync(filePath, "utf-8")).join("\n\n");
+}
 function extractPrismaEntities(config) {
   if (config.origin.type !== "prisma") {
     return { tables: [], views: [], enumDeclarations: {} };
   }
-  const schemaContent = readFileSync(config.origin.path, "utf-8");
+  const schemaContent = loadPrismaSchemaContent(config.origin.path);
   const schema = createPrismaSchemaBuilder(schemaContent);
   const prismaModels = schema.findAllByType("model", {});
   const tables = prismaModels.filter((m) => m !== null).filter((model) => {
@@ -1045,7 +1082,7 @@ function extractPrismaColumnDescriptions(config, entityName, enumDeclarations) {
   if (config.origin.type !== "prisma") {
     return [];
   }
-  const schemaContent = readFileSync(config.origin.path, "utf-8");
+  const schemaContent = loadPrismaSchemaContent(config.origin.path);
   const schema = createPrismaSchemaBuilder(schemaContent);
   let entity = schema.findByType("model", { name: entityName });
   if (!entity) {

@@ -140,7 +140,7 @@ export type UpdateableUser = Updateable<User>;
 // Prisma
 {
   type: 'prisma',
-  path: string
+  path: string  // Path to a .prisma file or a directory containing .prisma files
 }
 
 // SQL DDL Files (no database required)
