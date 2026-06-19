@@ -2,7 +2,8 @@
  * Prisma schema extraction utilities
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import * as path from 'node:path'
 import {
   type Attribute,
   type Enumerator,
@@ -11,6 +12,85 @@ import {
   createPrismaSchemaBuilder,
 } from '@mrleebo/prisma-ast'
 import type { Config, Desc } from '../types/index.js'
+
+function toComparableSchemaPath(rootPath: string, filePath: string): string {
+  return path.relative(rootPath, filePath).split(path.sep).join('/')
+}
+
+function comparePrismaSchemaFiles(rootPath: string, a: string, b: string): number {
+  const relativeA = toComparableSchemaPath(rootPath, a)
+  const relativeB = toComparableSchemaPath(rootPath, b)
+
+  if (relativeA === 'schema.prisma') return -1
+  if (relativeB === 'schema.prisma') return 1
+
+  return relativeA.localeCompare(relativeB)
+}
+
+function collectPrismaSchemaFiles(schemaPath: string): string[] {
+  const entries = readdirSync(schemaPath, { withFileTypes: true })
+  const files: string[] = []
+
+  for (const entry of entries) {
+    const entryPath = path.join(schemaPath, entry.name)
+
+    if (entry.isDirectory()) {
+      files.push(...collectPrismaSchemaFiles(entryPath))
+    } else if (entry.isFile() && entry.name.endsWith('.prisma')) {
+      files.push(entryPath)
+    }
+  }
+
+  return files
+}
+
+function loadPrismaSchemaContent(schemaPath: string): string {
+  const stats = statSync(schemaPath)
+
+  if (stats.isFile()) {
+    return readFileSync(schemaPath, 'utf-8')
+  }
+
+  if (!stats.isDirectory()) {
+    throw new Error(`Prisma schema path is not a file or directory: ${schemaPath}`)
+  }
+
+  const schemaFiles = collectPrismaSchemaFiles(schemaPath)
+    .sort((a, b) => comparePrismaSchemaFiles(schemaPath, a, b))
+
+  if (schemaFiles.length === 0) {
+    throw new Error(`No .prisma files found in directory: ${schemaPath}`)
+  }
+
+  return schemaFiles.map((filePath) => readFileSync(filePath, 'utf-8')).join('\n\n')
+}
+
+function cleanPrismaStringValue(value: unknown): string {
+  return String(value).replace(/^"|"$/g, '')
+}
+
+function hasPrismaPreviewFeature(features: unknown, featureName: string): boolean {
+  if (Array.isArray(features)) {
+    return features.some((feature) => cleanPrismaStringValue(feature) === featureName)
+  }
+
+  if (
+    features &&
+    typeof features === 'object' &&
+    'type' in features &&
+    features.type === 'array' &&
+    'args' in features &&
+    Array.isArray(features.args)
+  ) {
+    return features.args.some((feature) => cleanPrismaStringValue(feature) === featureName)
+  }
+
+  if (typeof features === 'string') {
+    return cleanPrismaStringValue(features) === featureName
+  }
+
+  return false
+}
 
 /**
  * Extract tables and views from Prisma schema
@@ -24,7 +104,7 @@ export function extractPrismaEntities(config: Config): {
     return { tables: [], views: [], enumDeclarations: {} }
   }
 
-  const schemaContent = readFileSync(config.origin.path, 'utf-8')
+  const schemaContent = loadPrismaSchemaContent(config.origin.path)
   const schema = createPrismaSchemaBuilder(schemaContent)
 
   // Extract tables (models)
@@ -130,7 +210,7 @@ export function extractPrismaColumnDescriptions(
     return []
   }
 
-  const schemaContent = readFileSync(config.origin.path, 'utf-8')
+  const schemaContent = loadPrismaSchemaContent(config.origin.path)
   const schema = createPrismaSchemaBuilder(schemaContent)
 
   // Try to find as model first, then as view
@@ -232,7 +312,7 @@ export function hasViewsEnabled(config: Config): boolean {
   }
 
   try {
-    const schemaContent = readFileSync(config.origin.path, 'utf-8')
+    const schemaContent = loadPrismaSchemaContent(config.origin.path)
     const schema = createPrismaSchemaBuilder(schemaContent)
     
     // Check if any generator has views in previewFeatures
@@ -245,14 +325,7 @@ export function hasViewsEnabled(config: Config): boolean {
         )
         
         if (previewFeatures && 'value' in previewFeatures) {
-          const features = previewFeatures.value
-          if (Array.isArray(features)) {
-            return features.some((f) => 
-              typeof f === 'string' && f.includes('views')
-            )
-          } else if (typeof features === 'string') {
-            return features.includes('views')
-          }
+          return hasPrismaPreviewFeature(previewFeatures.value, 'views')
         }
       }
     }
