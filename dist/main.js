@@ -178,7 +178,51 @@ const enumTypes = {
   sqlite: [],
   prisma: []
 };
-const enumRegex = /enum\(([^)]+)\)/i;
+function parseEnumValues(type) {
+  const open = type.match(/\benum\s*\(/i);
+  if (!open) return void 0;
+  const values = [];
+  let value = "";
+  let quote = null;
+  for (let i = open.index + open[0].length; i < type.length; i++) {
+    const char = type[i];
+    if (quote) {
+      if (char === "\\" && quote === "'") {
+        const next = type[i + 1];
+        if (next === void 0) break;
+        value += next === "'" || next === "\\" ? next : `\\${next}`;
+        i++;
+        continue;
+      }
+      if (char === quote) {
+        if (type[i + 1] === quote) {
+          value += quote;
+          i++;
+          continue;
+        }
+        quote = null;
+        continue;
+      }
+      value += char;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === ",") {
+      values.push(value.trim());
+      value = "";
+      continue;
+    }
+    if (char === ")") {
+      values.push(value.trim());
+      break;
+    }
+    value += char;
+  }
+  return values;
+}
 function getTypeMappings(dbType, dialect) {
   const effectiveType = dbType === "sql" ? dialect || "mysql" : dbType;
   return {
@@ -226,6 +270,12 @@ const hasTableIgnoreDirective = (comment) => {
   return comment.includes("@@ignore");
 };
 
+function toJsStringLiteral(value) {
+  if (/['\\\x00-\x1f\u2028\u2029]/.test(value)) {
+    return JSON.stringify(value);
+  }
+  return `'${value}'`;
+}
 function getType(op, desc, config, destination, entityName) {
   const { Default, Extra, Null, Type, DataType, Comment, EnumOptions } = desc;
   const schemaType = config.origin.type;
@@ -336,10 +386,7 @@ function getType(op, desc, config, destination, entityName) {
     let enumValues = [];
     const isMySQLEnum = (schemaType === "mysql" || schemaType === "sql" && dialect === "mysql") && dataType === "enum";
     if (isMySQLEnum) {
-      const match = Type.match(enumRegex);
-      if (match) {
-        enumValues = match[1].split(",").map((v) => v.trim().replace(/'/g, ""));
-      }
+      enumValues = parseEnumValues(Type) ?? [];
     } else if (schemaType === "postgres" && EnumOptions) {
       enumValues = EnumOptions;
     } else if (isPrismaEnum && config.enumDeclarations) {
@@ -349,18 +396,18 @@ function getType(op, desc, config, destination, entityName) {
       const shouldBeNullable = isNull;
       const shouldBeOptional = op === "insertable" && (hasDefaultValue || isGenerated) || op === "updateable";
       if (isZodDestination) {
-        const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(",")}])`;
+        const enumString = `z.enum([${enumValues.map(toJsStringLiteral).join(",")}])`;
         const nullishOption = destination.nullish;
         const nullableMethod = nullishOption && op !== "selectable" ? "nullish" : "nullable";
         if ((op === "table" || op === "insertable" || op === "updateable") && hasDefaultValue && Default !== null && !isGenerated) {
           if (shouldBeNullable && shouldBeOptional) {
-            return `${enumString}.${nullableMethod}().default('${Default}')`;
+            return `${enumString}.${nullableMethod}().default(${toJsStringLiteral(Default)})`;
           } else if (shouldBeNullable) {
-            return `${enumString}.${nullableMethod}().default('${Default}')`;
+            return `${enumString}.${nullableMethod}().default(${toJsStringLiteral(Default)})`;
           } else if (shouldBeOptional) {
-            return `${enumString}.optional().default('${Default}')`;
+            return `${enumString}.optional().default(${toJsStringLiteral(Default)})`;
           } else {
-            return `${enumString}.default('${Default}')`;
+            return `${enumString}.default(${toJsStringLiteral(Default)})`;
           }
         }
         if (shouldBeNullable && shouldBeOptional) {
@@ -373,14 +420,14 @@ function getType(op, desc, config, destination, entityName) {
           return enumString;
         }
       } else if (isTsDestination) {
-        const enumString = enumValues.map((v) => `'${v}'`).join(" | ");
+        const enumString = enumValues.map(toJsStringLiteral).join(" | ");
         if (shouldBeNullable) {
           return `${enumString} | null`;
         } else {
           return enumString;
         }
       } else if (isKyselyDestination) {
-        const enumString = enumValues.map((v) => `'${v}'`).join(" | ");
+        const enumString = enumValues.map(toJsStringLiteral).join(" | ");
         if (shouldBeNullable) {
           return `${enumString} | null`;
         } else {
@@ -1116,32 +1163,192 @@ function extractPrismaColumnDescriptions(config, entityName, enumDeclarations) {
   });
 }
 
+function stripSqlComments(sql) {
+  let result = "";
+  let quote = null;
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    if (quote) {
+      result += char;
+      if (char === "\\" && quote === "'" && i + 1 < sql.length) {
+        result += sql[i + 1];
+        i++;
+        continue;
+      }
+      if (char === quote) {
+        if (sql[i + 1] === quote) {
+          result += sql[i + 1];
+          i++;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      result += char;
+      continue;
+    }
+    if (char === "-" && sql[i + 1] === "-" || char === "#") {
+      while (i < sql.length && sql[i] !== "\n") {
+        result += " ";
+        i++;
+      }
+      i--;
+      continue;
+    }
+    if (char === "/" && sql[i + 1] === "*") {
+      let end = i + 2;
+      while (end < sql.length && !(sql[end] === "*" && sql[end + 1] === "/")) {
+        end++;
+      }
+      const stop = Math.min(end + 2, sql.length);
+      for (let j = i; j < stop; j++) {
+        result += sql[j] === "\n" ? "\n" : " ";
+      }
+      i = stop - 1;
+      continue;
+    }
+    result += char;
+  }
+  return result;
+}
+function findMatchingParen(sql, openIndex) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openIndex; i < sql.length; i++) {
+    const char = sql[i];
+    if (quote) {
+      if (char === "\\" && quote === "'" && i + 1 < sql.length) {
+        i++;
+        continue;
+      }
+      if (char === quote) {
+        if (sql[i + 1] === quote) {
+          i++;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "(") {
+      depth++;
+    } else if (char === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+function splitTopLevel(sql) {
+  const parts = [];
+  let current = "";
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    if (quote) {
+      current += char;
+      if (char === "\\" && quote === "'" && i + 1 < sql.length) {
+        current += sql[i + 1];
+        i++;
+        continue;
+      }
+      if (char === quote) {
+        if (sql[i + 1] === quote) {
+          current += sql[i + 1];
+          i++;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    if (char === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) parts.push(current);
+  return parts;
+}
+function readQuotedLiteral(text, start) {
+  const quote = text[start];
+  let value = "";
+  for (let i = start + 1; i < text.length; i++) {
+    const char = text[i];
+    if (char === "\\" && quote === "'" && i + 1 < text.length) {
+      const next = text[i + 1];
+      value += next === "'" || next === "\\" ? next : `\\${next}`;
+      i++;
+      continue;
+    }
+    if (char === quote) {
+      if (text[i + 1] === quote) {
+        value += quote;
+        i++;
+        continue;
+      }
+      return { value, end: i + 1 };
+    }
+    value += char;
+  }
+  return { value, end: text.length };
+}
+function maskStringLiterals(text) {
+  let result = "";
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === "'" || char === '"') {
+      const { end } = readQuotedLiteral(text, i);
+      result += " ".repeat(end - i);
+      i = end - 1;
+    } else {
+      result += char;
+    }
+  }
+  return result;
+}
+function unquoteIdentifier(identifier) {
+  const parts = identifier.split(".");
+  return parts[parts.length - 1].trim().replace(/^[`"]|[`"]$/g, "");
+}
 function extractSqlEntities(config) {
   const sqlPath = config.origin.path;
   const sqlContent = readFileSync(sqlPath, "utf-8");
+  const strippedSql = stripSqlComments(sqlContent);
   const tables = [];
   const views = [];
   const tableDefinitions = /* @__PURE__ */ new Map();
-  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(/gi;
+  const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?((?:[`"]?\w+[`"]?\s*\.\s*)?[`"]?\w+[`"]?)\s*\(/gi;
   let match;
-  while ((match = tableRegex.exec(sqlContent)) !== null) {
-    const tableName = match[1];
+  while ((match = tableRegex.exec(strippedSql)) !== null) {
+    const tableName = unquoteIdentifier(match[1]);
     const startIdx = match.index + match[0].length - 1;
-    let parenDepth = 1;
-    let endIdx = startIdx + 1;
-    while (parenDepth > 0 && endIdx < sqlContent.length) {
-      if (sqlContent[endIdx] === "(") parenDepth++;
-      if (sqlContent[endIdx] === ")") parenDepth--;
-      endIdx++;
-    }
-    if (parenDepth === 0) {
-      const restOfContent = sqlContent.substring(endIdx);
+    const endIdx = findMatchingParen(strippedSql, startIdx);
+    if (endIdx >= 0) {
+      const restOfContent = strippedSql.substring(endIdx + 1);
       const semicolonIdx = restOfContent.indexOf(";");
       const afterParen = semicolonIdx >= 0 ? restOfContent.substring(0, semicolonIdx) : restOfContent.substring(0, 500);
       if (afterParen.match(/COMMENT\s*=\s*'[^']*@@ignore[^']*'/i)) {
         continue;
       }
-      const columnSection = sqlContent.substring(startIdx + 1, endIdx - 1);
+      const columnSection = strippedSql.substring(startIdx + 1, endIdx);
       const columns = parseColumns(columnSection);
       if (columns.length > 0) {
         tables.push(tableName);
@@ -1153,11 +1360,11 @@ function extractSqlEntities(config) {
       }
     }
   }
-  const viewMatches = sqlContent.matchAll(
-    /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+[`"]?(\w+)[`"]?/gi
+  const viewMatches = strippedSql.matchAll(
+    /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+((?:[`"]?\w+[`"]?\s*\.\s*)?[`"]?\w+[`"]?)/gi
   );
   for (const match2 of viewMatches) {
-    const viewName = match2[1];
+    const viewName = unquoteIdentifier(match2[1]);
     views.push(viewName);
     const viewColumns = parseViewColumns(
       sqlContent,
@@ -1331,86 +1538,54 @@ function parseViewColumns(sqlContent, startPos, tableDefinitions) {
 }
 function parseColumns(columnSection) {
   const columns = [];
-  const lines = columnSection.split("\n");
-  const columnDefs = [];
-  let current = "";
-  let parenDepth = 0;
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine || trimmedLine.startsWith("--")) continue;
-    for (const char of trimmedLine) {
-      if (char === "(") parenDepth++;
-      if (char === ")") parenDepth--;
-    }
-    current += " " + trimmedLine;
-    if (parenDepth === 0) {
-      if (trimmedLine.endsWith(",")) {
-        columnDefs.push(current.trim().slice(0, -1));
-        current = "";
-      } else if (!trimmedLine.includes("(") && (trimmedLine.match(/,?\s*$/) || trimmedLine.match(/COMMENT\s+'[^']*'\s*,?$/i))) {
-        columnDefs.push(current.trim().replace(/,$/, ""));
-        current = "";
-      }
+  const definitions = splitTopLevel(columnSection);
+  const primaryKeyColumns = /* @__PURE__ */ new Set();
+  for (const definition of definitions) {
+    const pkMatch = definition.trim().match(/^PRIMARY\s+KEY\s*\(([\s\S]*)\)$/i);
+    if (!pkMatch) continue;
+    for (const part of pkMatch[1].split(",")) {
+      const columnName = part.trim().match(/^[`"]?(\w+)[`"]?/)?.[1];
+      if (columnName) primaryKeyColumns.add(columnName);
     }
   }
-  if (current.trim()) {
-    columnDefs.push(current.trim().replace(/,$/, ""));
-  }
-  for (const colDef of columnDefs) {
-    const trimmed = colDef.trim();
+  for (const definition of definitions) {
+    const trimmed = definition.trim();
     if (!trimmed) continue;
     if (trimmed.match(
-      /^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i
+      /^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s|FULLTEXT\s|SPATIAL\s)/i
     )) {
       continue;
     }
-    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/is);
+    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+([\s\S]+)$/i);
     if (!colMatch) continue;
     const name = colMatch[1];
     let rest = colMatch[2].trim();
     let type = "";
-    if (rest.match(/^(enum|set)\s*\(/i)) {
-      let depth = 1;
-      let pos = rest.indexOf("(") + 1;
-      while (pos < rest.length && depth > 0) {
-        if (rest[pos] === "(") depth++;
-        if (rest[pos] === ")") depth--;
-        pos++;
-      }
-      type = rest.substring(0, pos).replace(/\s+/g, " ").trim();
-      rest = rest.substring(pos).trim();
+    if (/^(enum|set)\s*\(/i.test(rest)) {
+      const openIndex = rest.indexOf("(");
+      const closeIndex = findMatchingParen(rest, openIndex);
+      if (closeIndex < 0) continue;
+      type = rest.substring(0, closeIndex + 1).replace(/\s+/g, " ").trim();
+      rest = rest.substring(closeIndex + 1).trim();
     } else {
-      const typeMatch = rest.match(/^([\w]+(?:\([^)]+\))?)/i);
-      if (typeMatch) {
-        type = typeMatch[1].trim();
-        rest = rest.substring(typeMatch[0].length).trim();
-      }
+      const typeMatch = rest.match(/^(\w+(?:\([^)]*\))?)/i);
+      if (!typeMatch) continue;
+      type = typeMatch[1].trim();
+      rest = rest.substring(typeMatch[0].length).trim();
     }
     if (!type) continue;
-    const nullable = !rest.match(/NOT\s+NULL/i);
+    const constraints = maskStringLiterals(rest);
+    const nullable = !primaryKeyColumns.has(name) && !/\bNOT\s+NULL\b/i.test(constraints) && !/\bPRIMARY\s+KEY\b/i.test(constraints);
     const extras = [];
-    if (rest.match(/AUTO_INCREMENT/i)) extras.push("auto_increment");
-    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i))
+    if (/\bAUTO_INCREMENT\b/i.test(constraints)) extras.push("auto_increment");
+    if (/\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/i.test(constraints))
       extras.push("on update CURRENT_TIMESTAMP");
-    let defaultValue = null;
-    const defaultMatch = rest.match(/DEFAULT\s+('(?:[^'\\]|\\.)*'|\S+)/i);
-    if (defaultMatch) {
-      defaultValue = defaultMatch[1].trim();
-      if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
-        defaultValue = defaultValue.slice(1, -1);
-      }
-      const upper = defaultValue.toUpperCase();
-      if (upper === "NULL") {
-        defaultValue = null;
-      } else if (upper.startsWith("CURRENT_TIMESTAMP")) {
-        extras.push("DEFAULT_GENERATED");
-      }
+    const parsedDefault = extractDefault(rest);
+    const defaultValue = parsedDefault?.value ?? null;
+    if (parsedDefault && !parsedDefault.quoted && parsedDefault.value.toUpperCase().startsWith("CURRENT_TIMESTAMP")) {
+      extras.push("DEFAULT_GENERATED");
     }
-    let comment = "";
-    const commentMatch = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i);
-    if (commentMatch) {
-      comment = commentMatch[1].replace(/\\'/g, "'");
-    }
+    const comment = extractComment(rest);
     if (comment.match(/@ignore/)) {
       continue;
     }
@@ -1430,12 +1605,39 @@ function parseColumns(columnSection) {
   }
   return columns;
 }
+function extractDefault(rest) {
+  const defaultMatch = maskStringLiterals(rest).match(/\bDEFAULT\b/i);
+  if (!defaultMatch) return null;
+  const start = skipWhitespace(
+    rest,
+    defaultMatch.index + defaultMatch[0].length
+  );
+  if (start >= rest.length) return null;
+  const char = rest[start];
+  if (char === "'" || char === '"') {
+    return { quoted: true, value: readQuotedLiteral(rest, start).value };
+  }
+  const token = rest.substring(start).match(/^\S+/)?.[0];
+  if (!token || token.toUpperCase() === "NULL") return null;
+  return { quoted: false, value: token };
+}
+function extractComment(rest) {
+  const commentMatch = maskStringLiterals(rest).match(/\bCOMMENT\b/i);
+  if (!commentMatch) return "";
+  const start = skipWhitespace(rest, commentMatch.index + commentMatch[0].length);
+  if (rest[start] !== "'" && rest[start] !== '"') return "";
+  return readQuotedLiteral(rest, start).value;
+}
+function skipWhitespace(text, start) {
+  let pos = start;
+  while (pos < text.length && /\s/.test(text[pos])) pos++;
+  return pos;
+}
 function extractSqlColumnDescriptions(config, tableName, tableDefinitions) {
   const table = tableDefinitions.get(tableName);
   if (!table) return [];
   return table.columns.map((col) => {
-    const enumMatch = col.type.match(/enum\s*\(([\s\S]+)\)/i);
-    const enumOptions = enumMatch ? enumMatch[1].match(/'([^']+)'/g)?.map((s) => s.slice(1, -1)) : void 0;
+    const enumOptions = parseEnumValues(col.type);
     const dataType = col.type.split("(")[0].toLowerCase();
     return {
       Field: col.name,

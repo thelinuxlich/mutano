@@ -3,7 +3,7 @@
  */
 
 import type { Config, Desc, Destination } from '../types/index.js'
-import { enumRegex, getTypeMappings, isJsonType } from '../types/mappings.js'
+import { parseEnumValues, getTypeMappings, isJsonType } from '../types/mappings.js'
 import {
   extractKyselyExpression,
   extractTSExpression,
@@ -11,6 +11,17 @@ import {
 } from '../utils/magic-comments.js'
 
 export type OperationType = 'table' | 'insertable' | 'updateable' | 'selectable'
+
+/**
+ * Quote a value as a JS/TS string literal. Plain values keep the historical
+ * single-quoted output; values that would break that literal use JSON escaping.
+ */
+function toJsStringLiteral(value: string): string {
+  if (/['\\\x00-\x1f\u2028\u2029]/.test(value)) {
+    return JSON.stringify(value)
+  }
+  return `'${value}'`
+}
 
 /**
  * Generate the appropriate type for a database field
@@ -228,10 +239,7 @@ export function getType(
       dataType === 'enum'
 
     if (isMySQLEnum) {
-      const match = Type.match(enumRegex)
-      if (match) {
-        enumValues = match[1].split(',').map((v) => v.trim().replace(/'/g, ''))
-      }
+      enumValues = parseEnumValues(Type) ?? []
     } else if (schemaType === 'postgres' && EnumOptions) {
       enumValues = EnumOptions
     } else if (isPrismaEnum && config.enumDeclarations) {
@@ -248,7 +256,7 @@ export function getType(
         op === 'updateable'
 
       if (isZodDestination) {
-        const enumString = `z.enum([${enumValues.map((v) => `'${v}'`).join(',')}])`
+        const enumString = `z.enum([${enumValues.map(toJsStringLiteral).join(',')}])`
         const nullishOption = (destination as any).nullish
         // For selectable schemas, always use .nullable() since DB fields are never undefined
         const nullableMethod =
@@ -266,14 +274,14 @@ export function getType(
           // Field has an explicit default value (not auto-generated)
           if (shouldBeNullable && shouldBeOptional) {
             // For updateable: nullable and optional with default at the end
-            return `${enumString}.${nullableMethod}().default('${Default}')`
+            return `${enumString}.${nullableMethod}().default(${toJsStringLiteral(Default)})`
           } else if (shouldBeNullable) {
-            return `${enumString}.${nullableMethod}().default('${Default}')`
+            return `${enumString}.${nullableMethod}().default(${toJsStringLiteral(Default)})`
           } else if (shouldBeOptional) {
             // For updateable: optional with default at the end
-            return `${enumString}.optional().default('${Default}')`
+            return `${enumString}.optional().default(${toJsStringLiteral(Default)})`
           } else {
-            return `${enumString}.default('${Default}')`
+            return `${enumString}.default(${toJsStringLiteral(Default)})`
           }
         }
 
@@ -291,7 +299,7 @@ export function getType(
           return enumString
         }
       } else if (isTsDestination) {
-        const enumString = enumValues.map((v) => `'${v}'`).join(' | ')
+        const enumString = enumValues.map(toJsStringLiteral).join(' | ')
 
         if (shouldBeNullable) {
           return `${enumString} | null`
@@ -299,7 +307,7 @@ export function getType(
           return enumString
         }
       } else if (isKyselyDestination) {
-        const enumString = enumValues.map((v) => `'${v}'`).join(' | ')
+        const enumString = enumValues.map(toJsStringLiteral).join(' | ')
 
         if (shouldBeNullable) {
           return `${enumString} | null`

@@ -141,7 +141,63 @@ export const enumTypes = {
   prisma: [] as string[],
 }
 
-export const enumRegex = /enum\(([^)]+)\)/i
+/**
+ * Parse MySQL ENUM values from a column type such as
+ * `enum('new','in,progress','it''s done','archived (old)')`.
+ * Commas, parentheses, and quotes inside quoted values are preserved.
+ */
+export function parseEnumValues(type: string): string[] | undefined {
+  const open = type.match(/\benum\s*\(/i)
+  if (!open) return undefined
+
+  const values: string[] = []
+  let value = ''
+  let quote: string | null = null
+
+  for (let i = open.index! + open[0].length; i < type.length; i++) {
+    const char = type[i]
+
+    if (quote) {
+      if (char === '\\' && quote === "'") {
+        const next = type[i + 1]
+        if (next === undefined) break
+        // MySQL escapes quotes/backslashes with a backslash; keep other
+        // escape sequences literal.
+        value += next === "'" || next === '\\' ? next : `\\${next}`
+        i++
+        continue
+      }
+      if (char === quote) {
+        if (type[i + 1] === quote) {
+          value += quote
+          i++
+          continue
+        }
+        quote = null
+        continue
+      }
+      value += char
+      continue
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char
+      continue
+    }
+    if (char === ',') {
+      values.push(value.trim())
+      value = ''
+      continue
+    }
+    if (char === ')') {
+      values.push(value.trim())
+      break
+    }
+    value += char
+  }
+
+  return values
+}
 
 /**
  * Get the appropriate type mappings for a database type

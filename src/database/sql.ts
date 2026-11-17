@@ -4,6 +4,7 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { parseEnumValues } from '../types/mappings.js'
 import type { Config, Desc } from '../types/index.js'
 
 interface ParsedTable {
@@ -22,6 +23,219 @@ interface ParsedColumn {
 }
 
 /**
+ * Replace SQL comments with whitespace while preserving offsets.
+ * String literals and quoted identifiers are left untouched.
+ */
+function stripSqlComments(sql: string): string {
+  let result = ''
+  let quote: string | null = null
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i]
+
+    if (quote) {
+      result += char
+      if (char === '\\' && quote === "'" && i + 1 < sql.length) {
+        result += sql[i + 1]
+        i++
+        continue
+      }
+      if (char === quote) {
+        if (sql[i + 1] === quote) {
+          result += sql[i + 1]
+          i++
+        } else {
+          quote = null
+        }
+      }
+      continue
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char
+      result += char
+      continue
+    }
+
+    if ((char === '-' && sql[i + 1] === '-') || char === '#') {
+      while (i < sql.length && sql[i] !== '\n') {
+        result += ' '
+        i++
+      }
+      // Let the loop emit the newline that terminates the comment.
+      i--
+      continue
+    }
+
+    if (char === '/' && sql[i + 1] === '*') {
+      let end = i + 2
+      while (end < sql.length && !(sql[end] === '*' && sql[end + 1] === '/')) {
+        end++
+      }
+      const stop = Math.min(end + 2, sql.length)
+      for (let j = i; j < stop; j++) {
+        result += sql[j] === '\n' ? '\n' : ' '
+      }
+      i = stop - 1
+      continue
+    }
+
+    result += char
+  }
+
+  return result
+}
+
+/**
+ * Find the closing parenthesis matching the opening one at `openIndex`.
+ * Ignores parentheses inside quoted strings and identifiers.
+ */
+function findMatchingParen(sql: string, openIndex: number): number {
+  let depth = 0
+  let quote: string | null = null
+
+  for (let i = openIndex; i < sql.length; i++) {
+    const char = sql[i]
+
+    if (quote) {
+      if (char === '\\' && quote === "'" && i + 1 < sql.length) {
+        i++
+        continue
+      }
+      if (char === quote) {
+        if (sql[i + 1] === quote) {
+          i++
+        } else {
+          quote = null
+        }
+      }
+      continue
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char
+      continue
+    }
+    if (char === '(') {
+      depth++
+    } else if (char === ')') {
+      depth--
+      if (depth === 0) return i
+    }
+  }
+
+  return -1
+}
+
+/**
+ * Split SQL text on commas that are not nested in parentheses or quotes.
+ */
+function splitTopLevel(sql: string): string[] {
+  const parts: string[] = []
+  let current = ''
+  let depth = 0
+  let quote: string | null = null
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i]
+
+    if (quote) {
+      current += char
+      if (char === '\\' && quote === "'" && i + 1 < sql.length) {
+        current += sql[i + 1]
+        i++
+        continue
+      }
+      if (char === quote) {
+        if (sql[i + 1] === quote) {
+          current += sql[i + 1]
+          i++
+        } else {
+          quote = null
+        }
+      }
+      continue
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char
+      current += char
+      continue
+    }
+    if (char === '(') depth++
+    if (char === ')') depth--
+
+    if (char === ',' && depth === 0) {
+      parts.push(current)
+      current = ''
+    } else {
+      current += char
+    }
+  }
+
+  if (current.trim()) parts.push(current)
+  return parts
+}
+
+/**
+ * Read a quoted SQL literal, handling doubled quotes and MySQL backslash escapes.
+ */
+function readQuotedLiteral(
+  text: string,
+  start: number,
+): { end: number; value: string } {
+  const quote = text[start]
+  let value = ''
+
+  for (let i = start + 1; i < text.length; i++) {
+    const char = text[i]
+    if (char === '\\' && quote === "'" && i + 1 < text.length) {
+      const next = text[i + 1]
+      value += next === "'" || next === '\\' ? next : `\\${next}`
+      i++
+      continue
+    }
+    if (char === quote) {
+      if (text[i + 1] === quote) {
+        value += quote
+        i++
+        continue
+      }
+      return { value, end: i + 1 }
+    }
+    value += char
+  }
+
+  return { value, end: text.length }
+}
+
+/**
+ * Blank out string literals so constraint keywords inside DEFAULT values
+ * (for example DEFAULT 'NOT NULL') are not misinterpreted.
+ */
+function maskStringLiterals(text: string): string {
+  let result = ''
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    if (char === "'" || char === '"') {
+      const { end } = readQuotedLiteral(text, i)
+      result += ' '.repeat(end - i)
+      i = end - 1
+    } else {
+      result += char
+    }
+  }
+
+  return result
+}
+
+function unquoteIdentifier(identifier: string): string {
+  const parts = identifier.split('.')
+  return parts[parts.length - 1].trim().replace(/^[`"]|[`"]$/g, '')
+}
+
+/**
  * Extracts table and column information from SQL DDL file
  */
 export function extractSqlEntities(config: Config): {
@@ -29,36 +243,35 @@ export function extractSqlEntities(config: Config): {
   views: string[]
   tableDefinitions: Map<string, ParsedTable>
 } {
-  const sqlPath = (config.origin as { type: 'sql'; path: string }).path
+  if (config.origin.type !== 'sql') {
+    throw new Error('extractSqlEntities requires a SQL origin')
+  }
+  const sqlPath = config.origin.path
   const sqlContent = readFileSync(sqlPath, 'utf-8')
+  // Offsets are preserved, so view parsing can still use the raw content.
+  const strippedSql = stripSqlComments(sqlContent)
 
   const tables: string[] = []
   const views: string[] = []
   const tableDefinitions = new Map<string, ParsedTable>()
 
-  // Find all CREATE TABLE statements by looking for the pattern and matching parentheses
+  // Find all CREATE TABLE statements (optionally schema-qualified) and match
+  // their parentheses while ignoring quoted values.
   const tableRegex =
-    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(/gi
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?((?:[`"]?\w+[`"]?\s*\.\s*)?[`"]?\w+[`"]?)\s*\(/gi
 
   let match
-  while ((match = tableRegex.exec(sqlContent)) !== null) {
-    const tableName = match[1]
+  while ((match = tableRegex.exec(strippedSql)) !== null) {
+    const tableName = unquoteIdentifier(match[1])
     const startIdx = match.index + match[0].length - 1 // Position of opening paren
 
-    // Find the matching closing parenthesis for the CREATE TABLE
-    let parenDepth = 1
-    let endIdx = startIdx + 1
-    while (parenDepth > 0 && endIdx < sqlContent.length) {
-      if (sqlContent[endIdx] === '(') parenDepth++
-      if (sqlContent[endIdx] === ')') parenDepth--
-      endIdx++
-    }
+    const endIdx = findMatchingParen(strippedSql, startIdx)
 
-    if (parenDepth === 0) {
+    if (endIdx >= 0) {
       // Check for @@ignore in table comment after the closing paren
       // MySQL table comments look like: ) ENGINE = InnoDB ... COMMENT = '@@ignore';
       // Limit search to text before the next semicolon to avoid matching comments from other tables
-      const restOfContent = sqlContent.substring(endIdx)
+      const restOfContent = strippedSql.substring(endIdx + 1)
       const semicolonIdx = restOfContent.indexOf(';')
       const afterParen =
         semicolonIdx >= 0
@@ -68,7 +281,7 @@ export function extractSqlEntities(config: Config): {
         continue
       }
 
-      const columnSection = sqlContent.substring(startIdx + 1, endIdx - 1)
+      const columnSection = strippedSql.substring(startIdx + 1, endIdx)
       const columns = parseColumns(columnSection)
 
       if (columns.length > 0) {
@@ -83,15 +296,16 @@ export function extractSqlEntities(config: Config): {
   }
 
   // Parse CREATE VIEW statements
-  const viewMatches = sqlContent.matchAll(
-    /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+[`"]?(\w+)[`"]?/gi,
+  const viewMatches = strippedSql.matchAll(
+    /CREATE\s+(?:OR\s+REPLACE\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+((?:[`"]?\w+[`"]?\s*\.\s*)?[`"]?\w+[`"]?)/gi,
   )
 
   for (const match of viewMatches) {
-    const viewName = match[1]
+    const viewName = unquoteIdentifier(match[1])
     views.push(viewName)
 
-    // Parse view columns from the SELECT statement
+    // Parse view columns from the SELECT statement (raw content keeps
+    // inline `--` magic comments intact).
     const viewColumns = parseViewColumns(
       sqlContent,
       match.index + match[0].length,
@@ -335,125 +549,84 @@ function parseViewColumns(
  */
 function parseColumns(columnSection: string): ParsedColumn[] {
   const columns: ParsedColumn[] = []
+  const definitions = splitTopLevel(columnSection)
 
-  // Process line by line, tracking multi-line column definitions
-  const lines = columnSection.split('\n')
-  const columnDefs: string[] = []
-  let current = ''
-  let parenDepth = 0
-
-  for (const line of lines) {
-    const trimmedLine = line.trim()
-    if (!trimmedLine || trimmedLine.startsWith('--')) continue
-
-    // Track parentheses depth for enums
-    for (const char of trimmedLine) {
-      if (char === '(') parenDepth++
-      if (char === ')') parenDepth--
-    }
-
-    current += ' ' + trimmedLine
-
-    // If at depth 0 and line ends with comma, or is a complete definition
-    if (parenDepth === 0) {
-      if (trimmedLine.endsWith(',')) {
-        columnDefs.push(current.trim().slice(0, -1)) // Remove trailing comma
-        current = ''
-      } else if (
-        !trimmedLine.includes('(') &&
-        (trimmedLine.match(/,?\s*$/) ||
-          trimmedLine.match(/COMMENT\s+'[^']*'\s*,?$/i))
-      ) {
-        columnDefs.push(current.trim().replace(/,$/, ''))
-        current = ''
-      }
+  // Columns listed in a table-level PRIMARY KEY are implicitly NOT NULL.
+  const primaryKeyColumns = new Set<string>()
+  for (const definition of definitions) {
+    const pkMatch = definition.trim().match(/^PRIMARY\s+KEY\s*\(([\s\S]*)\)$/i)
+    if (!pkMatch) continue
+    for (const part of pkMatch[1].split(',')) {
+      const columnName = part.trim().match(/^[`"]?(\w+)[`"]?/)?.[1]
+      if (columnName) primaryKeyColumns.add(columnName)
     }
   }
 
-  // Add any remaining
-  if (current.trim()) {
-    columnDefs.push(current.trim().replace(/,$/, ''))
-  }
-
-  for (const colDef of columnDefs) {
-    const trimmed = colDef.trim()
+  for (const definition of definitions) {
+    const trimmed = definition.trim()
     if (!trimmed) continue
 
     // Skip constraints
     if (
       trimmed.match(
-        /^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s)/i,
+        /^(PRIMARY\s+KEY|KEY\s|INDEX|UNIQUE\s|FOREIGN\s+KEY|CONSTRAINT|CHECK\s|FULLTEXT\s|SPATIAL\s)/i,
       )
     ) {
       continue
     }
 
     // Parse column: `name` type [constraints...]
-    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+(.+)$/is)
+    const colMatch = trimmed.match(/^[`"]?(\w+)[`"]?\s+([\s\S]+)$/i)
     if (!colMatch) continue
 
     const name = colMatch[1]
     let rest = colMatch[2].trim()
 
-    // Extract type with special handling for multi-line enums
+    // Extract type, handling quoted parentheses in enums/sets
     let type = ''
-    if (rest.match(/^(enum|set)\s*\(/i)) {
-      // Find the closing paren for this enum
-      let depth = 1
-      let pos = rest.indexOf('(') + 1
-      while (pos < rest.length && depth > 0) {
-        if (rest[pos] === '(') depth++
-        if (rest[pos] === ')') depth--
-        pos++
-      }
-      type = rest.substring(0, pos).replace(/\s+/g, ' ').trim()
-      rest = rest.substring(pos).trim()
+    if (/^(enum|set)\s*\(/i.test(rest)) {
+      const openIndex = rest.indexOf('(')
+      const closeIndex = findMatchingParen(rest, openIndex)
+      if (closeIndex < 0) continue
+      type = rest.substring(0, closeIndex + 1).replace(/\s+/g, ' ').trim()
+      rest = rest.substring(closeIndex + 1).trim()
     } else {
       // Regular type
-      const typeMatch = rest.match(/^([\w]+(?:\([^)]+\))?)/i)
-      if (typeMatch) {
-        type = typeMatch[1].trim()
-        rest = rest.substring(typeMatch[0].length).trim()
-      }
+      const typeMatch = rest.match(/^(\w+(?:\([^)]*\))?)/i)
+      if (!typeMatch) continue
+      type = typeMatch[1].trim()
+      rest = rest.substring(typeMatch[0].length).trim()
     }
 
     if (!type) continue
 
-    // Parse constraints
-    const nullable = !rest.match(/NOT\s+NULL/i)
+    // Keywords inside DEFAULT literals (e.g. DEFAULT 'NOT NULL') do not
+    // constrain the column.
+    const constraints = maskStringLiterals(rest)
+    const nullable =
+      !primaryKeyColumns.has(name) &&
+      !/\bNOT\s+NULL\b/i.test(constraints) &&
+      !/\bPRIMARY\s+KEY\b/i.test(constraints)
 
     // Extract EXTRA first (before processing DEFAULT)
     const extras: string[] = []
-    if (rest.match(/AUTO_INCREMENT/i)) extras.push('auto_increment')
-    if (rest.match(/ON\s+UPDATE\s+CURRENT_TIMESTAMP/i))
+    if (/\bAUTO_INCREMENT\b/i.test(constraints)) extras.push('auto_increment')
+    if (/\bON\s+UPDATE\s+CURRENT_TIMESTAMP\b/i.test(constraints))
       extras.push('on update CURRENT_TIMESTAMP')
 
-    // Extract DEFAULT - handle quoted strings with spaces
-    let defaultValue: string | null = null
-    // Match DEFAULT followed by either a quoted string or a non-whitespace value
-    const defaultMatch = rest.match(/DEFAULT\s+('(?:[^'\\]|\\.)*'|\S+)/i)
-    if (defaultMatch) {
-      defaultValue = defaultMatch[1].trim()
-      // Handle quoted strings
-      if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
-        defaultValue = defaultValue.slice(1, -1)
-      }
-      const upper = defaultValue.toUpperCase()
-      if (upper === 'NULL') {
-        defaultValue = null
-      } else if (upper.startsWith('CURRENT_TIMESTAMP')) {
-        // CURRENT_TIMESTAMP defaults should be treated as generated (like MySQL driver does)
-        // Set extra to indicate this is a default-generated field
-        extras.push('DEFAULT_GENERATED')
-      }
+    const parsedDefault = extractDefault(rest)
+    const defaultValue = parsedDefault?.value ?? null
+    if (
+      parsedDefault &&
+      !parsedDefault.quoted &&
+      parsedDefault.value.toUpperCase().startsWith('CURRENT_TIMESTAMP')
+    ) {
+      // CURRENT_TIMESTAMP defaults should be treated as generated (like MySQL driver does)
+      // Set extra to indicate this is a default-generated field
+      extras.push('DEFAULT_GENERATED')
     }
 
-    // Extract COMMENT
-    let comment = ''
-    const commentMatch = rest.match(/COMMENT\s+'((?:[^'\\]|\\.)*)'/i)
-    if (commentMatch) {
-      comment = commentMatch[1].replace(/\\'/g, "'")
-    }
+    const comment = extractComment(rest)
 
     // Skip columns with @ignore comment
     if (comment.match(/@ignore/)) {
@@ -487,6 +660,52 @@ function parseColumns(columnSection: string): ParsedColumn[] {
 }
 
 /**
+ * Extract a DEFAULT value from a column's constraint text.
+ * Quoted literals keep their content; bare NULL means no default.
+ */
+function extractDefault(
+  rest: string,
+): { quoted: boolean; value: string } | null {
+  const defaultMatch = maskStringLiterals(rest).match(/\bDEFAULT\b/i)
+  if (!defaultMatch) return null
+
+  // Masked literals became spaces, so skip whitespace in the original text.
+  const start = skipWhitespace(
+    rest,
+    defaultMatch.index! + defaultMatch[0].length,
+  )
+  if (start >= rest.length) return null
+
+  const char = rest[start]
+  if (char === "'" || char === '"') {
+    return { quoted: true, value: readQuotedLiteral(rest, start).value }
+  }
+
+  const token = rest.substring(start).match(/^\S+/)?.[0]
+  if (!token || token.toUpperCase() === 'NULL') return null
+  return { quoted: false, value: token }
+}
+
+/**
+ * Extract a COMMENT clause from a column's constraint text.
+ */
+function extractComment(rest: string): string {
+  const commentMatch = maskStringLiterals(rest).match(/\bCOMMENT\b/i)
+  if (!commentMatch) return ''
+
+  // Masked literals became spaces, so skip whitespace in the original text.
+  const start = skipWhitespace(rest, commentMatch.index! + commentMatch[0].length)
+  if (rest[start] !== "'" && rest[start] !== '"') return ''
+  return readQuotedLiteral(rest, start).value
+}
+
+function skipWhitespace(text: string, start: number): number {
+  let pos = start
+  while (pos < text.length && /\s/.test(text[pos])) pos++
+  return pos
+}
+
+/**
  * Extract column descriptions for a table
  */
 export function extractSqlColumnDescriptions(
@@ -498,11 +717,8 @@ export function extractSqlColumnDescriptions(
   if (!table) return []
 
   return table.columns.map((col) => {
-    // Parse enum options - handle multi-line enums by using dotAll flag
-    const enumMatch = col.type.match(/enum\s*\(([\s\S]+)\)/i)
-    const enumOptions = enumMatch
-      ? enumMatch[1].match(/'([^']+)'/g)?.map((s) => s.slice(1, -1))
-      : undefined
+    // Parse enum options - quoted commas/parentheses are preserved
+    const enumOptions = parseEnumValues(col.type)
 
     // Extract base data type
     const dataType = col.type.split('(')[0].toLowerCase()
