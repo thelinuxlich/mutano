@@ -1329,6 +1329,9 @@ function unquoteIdentifier(identifier) {
   return parts[parts.length - 1].trim().replace(/^[`"]|[`"]$/g, "");
 }
 function extractSqlEntities(config) {
+  if (config.origin.type !== "sql") {
+    throw new Error("extractSqlEntities requires a SQL origin");
+  }
   const sqlPath = config.origin.path;
   const sqlContent = readFileSync(sqlPath, "utf-8");
   const strippedSql = stripSqlComments(sqlContent);
